@@ -1,0 +1,86 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "moonbit-community/asm"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn alloc(mem_size? : UInt64) -> UInt64
+
+pub fn linux_syscall_number(String) -> Int?
+
+pub let rax : Operand
+
+pub let rbp : Operand
+
+pub let rbx : Operand
+
+pub let rcx : Operand
+
+pub let rdi : Operand
+
+pub let rdx : Operand
+
+pub let rsi : Operand
+
+pub let rsp : Operand
+
+// Errors
+pub(all) suberror ASMContextError {
+  UnsupportedAddOperands(Operand, Operand)
+  UnsupportedSubOperands(Operand, Operand)
+  UnsupportedXorOperands(Operand, Operand)
+  UnsupportedMulOperand(Operand)
+  UnsupportedIncOperand(Operand)
+  UnsupportedDecOperand(Operand)
+  LoopRel8OutOfRange(Int)
+  UnsupportedIMulOperands(Operand, Operand)
+  UnsupportedMovOperands(Operand, Operand)
+  UnsupportedPushOperand(Operand)
+  UnsupportedPopOperand(Operand)
+} derive(@debug.Debug)
+
+// Types and methods
+type ASMContext
+pub fn ASMContext::add(Self, Operand, Operand) -> Unit raise ASMContextError
+pub fn ASMContext::call(Self, Target) -> Unit
+pub fn ASMContext::dec(Self, Operand) -> Unit raise ASMContextError
+pub fn ASMContext::exec(Self) -> Int64
+pub fn ASMContext::extern_fn(Self, String) -> Target
+pub fn ASMContext::imul(Self, Operand, Operand) -> Unit raise ASMContextError
+pub fn ASMContext::inc(Self, Operand) -> Unit raise ASMContextError
+pub fn ASMContext::label(Self) -> Label
+pub fn ASMContext::loop_rel8(Self, Label) -> Unit raise ASMContextError
+pub fn ASMContext::mov(Self, Operand, Operand) -> Unit raise ASMContextError
+pub fn ASMContext::mul(Self, Operand) -> Unit raise ASMContextError
+pub fn ASMContext::new(start~ : UInt64) -> Self
+pub fn ASMContext::nop(Self) -> Unit
+pub fn ASMContext::pop(Self, Operand) -> Unit raise ASMContextError
+pub fn ASMContext::push(Self, Operand) -> Unit raise ASMContextError
+pub fn ASMContext::ret(Self) -> Unit
+pub fn ASMContext::sub(Self, Operand, Operand) -> Unit raise ASMContextError
+pub fn ASMContext::syscall(Self) -> Unit
+pub fn ASMContext::xor(Self, Operand, Operand) -> Unit raise ASMContextError
+
+type Instr derive(@debug.Debug)
+
+type Label derive(@debug.Debug)
+pub fn Label::target(Self) -> Target
+
+pub(all) enum Operand {
+  Imm32(Int)
+  Reg(Reg)
+} derive(@debug.Debug)
+
+type Reg derive(@debug.Debug)
+
+pub(all) enum Target {
+  Label(Label)
+  Extern(Int)
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits
+
