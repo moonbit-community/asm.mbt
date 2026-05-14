@@ -220,6 +220,7 @@ pub fn ASMContext::push(Self, Operand) -> Unit raise ASMContextError
 pub fn ASMContext::ret(Self) -> Unit
 pub fn ASMContext::sub(Self, Operand, Operand) -> Unit raise ASMContextError
 pub fn ASMContext::syscall(Self) -> Unit
+pub fn ASMContext::trace(Self) -> Array[Instr]
 pub fn ASMContext::xor(Self, Operand, Operand) -> Unit raise ASMContextError
 
 pub(all) enum GprBase {
@@ -255,7 +256,57 @@ pub(all) enum Immediate {
   Imm64(Int64)
 } derive(Eq, @debug.Debug)
 
-type Instr derive(@debug.Debug)
+pub(all) enum Instr {
+  RetNearOpC3
+  NopOp90
+  SyscallOp0F05
+  CallRel32OpE8(Target, Int)
+  LoopRcxRel8OpE2(Label, Int)
+  MovRm8Reg8Op88(Operand, Register)
+  MovRmRegOp89(Operand, Register)
+  MovReg8Rm8Op8A(Register, Operand)
+  MovRegRmOp8B(Register, Operand)
+  MovReg8Imm8OpB0(Register, Immediate)
+  MovRegImmOpB8(Register, Immediate)
+  MovRm8Imm8OpC6Ext0(Operand, Immediate)
+  MovRmImmOpC7Ext0(Operand, Immediate)
+  AddRm8Reg8Op00(Operand, Register)
+  AddRmRegOp01(Operand, Register)
+  AddReg8Rm8Op02(Register, Operand)
+  AddRegRmOp03(Register, Operand)
+  AddRm8Imm8Op80Ext0(Operand, Immediate)
+  AddRmImmOp81Ext0(Operand, Immediate)
+  AddRmImm8SignExtOp83Ext0(Operand, Immediate)
+  SubRm8Reg8Op28(Operand, Register)
+  SubRmRegOp29(Operand, Register)
+  SubReg8Rm8Op2A(Register, Operand)
+  SubRegRmOp2B(Register, Operand)
+  SubRm8Imm8Op80Ext5(Operand, Immediate)
+  SubRmImmOp81Ext5(Operand, Immediate)
+  SubRmImm8SignExtOp83Ext5(Operand, Immediate)
+  XorRm8Reg8Op30(Operand, Register)
+  XorRmRegOp31(Operand, Register)
+  XorReg8Rm8Op32(Register, Operand)
+  XorRegRmOp33(Register, Operand)
+  XorRm8Imm8Op80Ext6(Operand, Immediate)
+  XorRmImmOp81Ext6(Operand, Immediate)
+  XorRmImm8SignExtOp83Ext6(Operand, Immediate)
+  MulRm8OpF6Ext4(Operand)
+  MulRmOpF7Ext4(Operand)
+  IMulRegRmOp0FAF(Register, Operand)
+  IMulRegRmImm8Op6B(Register, Operand, Immediate)
+  IMulRegRmImmOp69(Register, Operand, Immediate)
+  IncRm8OpFEExt0(Operand)
+  IncRmOpFFExt0(Operand)
+  DecRm8OpFEExt1(Operand)
+  DecRmOpFFExt1(Operand)
+  PushRegOp50(Register)
+  PushRmOpFFExt6(Operand)
+  PushImm8Op6A(Immediate)
+  PushImmOp68(Immediate)
+  PopRegOp58(Register)
+  PopRmOp8FExt0(Operand)
+} derive(Eq, @debug.Debug)
 
 type Label derive(Eq, @debug.Debug)
 pub fn Label::target(Self) -> Target

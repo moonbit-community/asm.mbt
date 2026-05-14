@@ -108,6 +108,12 @@ pub fn ASMContext::bytes(self : ASMContext) -> Bytes {
 }
 
 ///|
+/// Return a copy of the successfully emitted instruction trace.
+pub fn ASMContext::trace(self : ASMContext) -> Array[Instr] {
+  self.instrs.copy()
+}
+
+///|
 /// Copy the generated code into executable memory and call it as `fn() -> Int64`.
 ///
 /// The generated function is expected to follow the platform ABI enough to
@@ -124,15 +130,15 @@ pub fn ASMContext::exec(self : ASMContext) -> Int64 raise ASMContextError {
 ///|
 /// Emit a one-byte NOP instruction.
 pub fn ASMContext::nop(self : ASMContext) -> Unit {
-  self.instrs.push(Nop)
   self.emit_byte(0x90)
+  self.instrs.push(NopOp90)
 }
 
 ///|
 /// Emit a RET instruction.
 pub fn ASMContext::ret(self : ASMContext) -> Unit {
-  self.instrs.push(Ret)
   self.emit_byte(0xC3)
+  self.instrs.push(RetNearOpC3)
 }
 
 ///|
@@ -141,6 +147,104 @@ fn rm_from_operand(operand : Operand) -> RmOperand raise ASMContextError {
     Reg(register) => reg_as_rm(register)
     Mem(memory) => mem_as_rm(memory)
     _ => raise UnsupportedOperandWidth(operand)
+  }
+}
+
+///|
+priv enum BinaryInstrKind {
+  AddInstr
+  SubInstr
+  XorInstr
+}
+
+///|
+fn binary_rm_reg8_instr(
+  kind : BinaryInstrKind,
+  dst : Operand,
+  src : Register,
+) -> Instr {
+  match kind {
+    AddInstr => AddRm8Reg8Op00(dst, src)
+    SubInstr => SubRm8Reg8Op28(dst, src)
+    XorInstr => XorRm8Reg8Op30(dst, src)
+  }
+}
+
+///|
+fn binary_rm_reg_instr(
+  kind : BinaryInstrKind,
+  dst : Operand,
+  src : Register,
+) -> Instr {
+  match kind {
+    AddInstr => AddRmRegOp01(dst, src)
+    SubInstr => SubRmRegOp29(dst, src)
+    XorInstr => XorRmRegOp31(dst, src)
+  }
+}
+
+///|
+fn binary_reg_rm8_instr(
+  kind : BinaryInstrKind,
+  dst : Register,
+  src : Operand,
+) -> Instr {
+  match kind {
+    AddInstr => AddReg8Rm8Op02(dst, src)
+    SubInstr => SubReg8Rm8Op2A(dst, src)
+    XorInstr => XorReg8Rm8Op32(dst, src)
+  }
+}
+
+///|
+fn binary_reg_rm_instr(
+  kind : BinaryInstrKind,
+  dst : Register,
+  src : Operand,
+) -> Instr {
+  match kind {
+    AddInstr => AddRegRmOp03(dst, src)
+    SubInstr => SubRegRmOp2B(dst, src)
+    XorInstr => XorRegRmOp33(dst, src)
+  }
+}
+
+///|
+fn binary_rm_imm8_instr(
+  kind : BinaryInstrKind,
+  dst : Operand,
+  immediate : Immediate,
+) -> Instr {
+  match kind {
+    AddInstr => AddRm8Imm8Op80Ext0(dst, immediate)
+    SubInstr => SubRm8Imm8Op80Ext5(dst, immediate)
+    XorInstr => XorRm8Imm8Op80Ext6(dst, immediate)
+  }
+}
+
+///|
+fn binary_rm_imm_instr(
+  kind : BinaryInstrKind,
+  dst : Operand,
+  immediate : Immediate,
+) -> Instr {
+  match kind {
+    AddInstr => AddRmImmOp81Ext0(dst, immediate)
+    SubInstr => SubRmImmOp81Ext5(dst, immediate)
+    XorInstr => XorRmImmOp81Ext6(dst, immediate)
+  }
+}
+
+///|
+fn binary_rm_imm8_sign_ext_instr(
+  kind : BinaryInstrKind,
+  dst : Operand,
+  immediate : Immediate,
+) -> Instr {
+  match kind {
+    AddInstr => AddRmImm8SignExtOp83Ext0(dst, immediate)
+    SubInstr => SubRmImm8SignExtOp83Ext5(dst, immediate)
+    XorInstr => XorRmImm8SignExtOp83Ext6(dst, immediate)
   }
 }
 
@@ -154,14 +258,17 @@ fn ASMContext::emit_binary_imm(
   self : ASMContext,
   width : Width,
   extension : Byte,
-  rm : RmOperand,
+  dst : Operand,
   immediate : Immediate,
-) -> Unit raise ASMContextError {
+  kind : BinaryInstrKind,
+) -> Instr raise ASMContextError {
+  let rm = rm_from_operand(dst)
   immediate.validate()
   match (width, immediate) {
     (W8, Imm8(_)) => {
       self.emit_group_rm(W8, 0x80, extension, rm, false)
       self.emit_immediate(immediate)
+      binary_rm_imm8_instr(kind, dst, immediate)
     }
     (W16, Imm8(value)) => {
       if !fits_i8(value) {
@@ -169,10 +276,12 @@ fn ASMContext::emit_binary_imm(
       }
       self.emit_group_rm(W16, 0x83, extension, rm, false)
       self.emit_i8(value)
+      binary_rm_imm8_sign_ext_instr(kind, dst, immediate)
     }
     (W16, Imm16(_)) => {
       self.emit_group_rm(W16, 0x81, extension, rm, false)
       self.emit_immediate(immediate)
+      binary_rm_imm_instr(kind, dst, immediate)
     }
     (W32, Imm8(value)) => {
       if !fits_i8(value) {
@@ -180,10 +289,12 @@ fn ASMContext::emit_binary_imm(
       }
       self.emit_group_rm(W32, 0x83, extension, rm, false)
       self.emit_i8(value)
+      binary_rm_imm8_sign_ext_instr(kind, dst, immediate)
     }
     (W32, Imm32(_)) => {
       self.emit_group_rm(W32, 0x81, extension, rm, false)
       self.emit_immediate(immediate)
+      binary_rm_imm_instr(kind, dst, immediate)
     }
     (W64, Imm8(value)) => {
       if !fits_i8(value) {
@@ -191,10 +302,12 @@ fn ASMContext::emit_binary_imm(
       }
       self.emit_group_rm(W64, 0x83, extension, rm, true)
       self.emit_i8(value)
+      binary_rm_imm8_sign_ext_instr(kind, dst, immediate)
     }
     (W64, Imm32(_)) => {
       self.emit_group_rm(W64, 0x81, extension, rm, true)
       self.emit_immediate(immediate)
+      binary_rm_imm_instr(kind, dst, immediate)
     }
     _ => raise OperandWidthMismatch(width, immediate.width())
   }
@@ -212,7 +325,8 @@ fn ASMContext::emit_binary(
   opcode_reg_rm8 : Byte,
   opcode_reg_rm : Byte,
   imm_extension : Byte,
-) -> Unit raise ASMContextError {
+  kind : BinaryInstrKind,
+) -> Instr raise ASMContextError {
   match (lhs, rhs) {
     (Reg(dst), Reg(src)) => {
       let width = require_same_width(lhs, rhs)
@@ -227,6 +341,11 @@ fn ASMContext::emit_binary(
         reg_as_rm(dst),
         width == W64,
       )
+      if width == W8 {
+        binary_rm_reg8_instr(kind, lhs, src)
+      } else {
+        binary_rm_reg_instr(kind, lhs, src)
+      }
     }
     (Mem(dst), Reg(src)) => {
       let width = require_same_width(lhs, rhs)
@@ -241,6 +360,11 @@ fn ASMContext::emit_binary(
         mem_as_rm(dst),
         width == W64,
       )
+      if width == W8 {
+        binary_rm_reg8_instr(kind, lhs, src)
+      } else {
+        binary_rm_reg_instr(kind, lhs, src)
+      }
     }
     (Reg(dst), Mem(src)) => {
       let width = require_same_width(lhs, rhs)
@@ -255,15 +379,15 @@ fn ASMContext::emit_binary(
         mem_as_rm(src),
         width == W64,
       )
+      if width == W8 {
+        binary_reg_rm8_instr(kind, dst, rhs)
+      } else {
+        binary_reg_rm_instr(kind, dst, rhs)
+      }
     }
     (Reg(_) | Mem(_), Imm(immediate)) => {
       let width = width_or_error(lhs)
-      self.emit_binary_imm(
-        width,
-        imm_extension,
-        rm_from_operand(lhs),
-        immediate,
-      )
+      self.emit_binary_imm(width, imm_extension, lhs, immediate, kind)
     }
     _ => raise UnsupportedOperandWidth(lhs)
   }
@@ -279,12 +403,12 @@ pub fn ASMContext::add(
   lhs : Operand,
   rhs : Operand,
 ) -> Unit raise ASMContextError {
-  self.instrs.push(Add(lhs, rhs))
-  match (lhs, rhs) {
+  let instr = match (lhs, rhs) {
     (Reg(_) | Mem(_), Reg(_) | Imm(_)) | (Reg(_), Mem(_)) =>
-      self.emit_binary(lhs, rhs, 0x00, 0x01, 0x02, 0x03, 0)
+      self.emit_binary(lhs, rhs, 0x00, 0x01, 0x02, 0x03, 0, AddInstr)
     _ => raise UnsupportedAddOperands(lhs, rhs)
   }
+  self.instrs.push(instr)
 }
 
 ///|
@@ -296,12 +420,12 @@ pub fn ASMContext::sub(
   lhs : Operand,
   rhs : Operand,
 ) -> Unit raise ASMContextError {
-  self.instrs.push(Sub(lhs, rhs))
-  match (lhs, rhs) {
+  let instr = match (lhs, rhs) {
     (Reg(_) | Mem(_), Reg(_) | Imm(_)) | (Reg(_), Mem(_)) =>
-      self.emit_binary(lhs, rhs, 0x28, 0x29, 0x2A, 0x2B, 5)
+      self.emit_binary(lhs, rhs, 0x28, 0x29, 0x2A, 0x2B, 5, SubInstr)
     _ => raise UnsupportedSubOperands(lhs, rhs)
   }
+  self.instrs.push(instr)
 }
 
 ///|
@@ -313,12 +437,12 @@ pub fn ASMContext::xor(
   lhs : Operand,
   rhs : Operand,
 ) -> Unit raise ASMContextError {
-  self.instrs.push(Xor(lhs, rhs))
-  match (lhs, rhs) {
+  let instr = match (lhs, rhs) {
     (Reg(_) | Mem(_), Reg(_) | Imm(_)) | (Reg(_), Mem(_)) =>
-      self.emit_binary(lhs, rhs, 0x30, 0x31, 0x32, 0x33, 6)
+      self.emit_binary(lhs, rhs, 0x30, 0x31, 0x32, 0x33, 6, XorInstr)
     _ => raise UnsupportedXorOperands(lhs, rhs)
   }
+  self.instrs.push(instr)
 }
 
 ///|
@@ -330,8 +454,7 @@ pub fn ASMContext::mul(
   self : ASMContext,
   operand : Operand,
 ) -> Unit raise ASMContextError {
-  self.instrs.push(Mul(operand))
-  match operand {
+  let instr = match operand {
     Reg(_) | Mem(_) => {
       let width = width_or_error(operand)
       self.emit_group_rm(
@@ -345,9 +468,15 @@ pub fn ASMContext::mul(
         rm_from_operand(operand),
         width == W64,
       )
+      if width == W8 {
+        MulRm8OpF6Ext4(operand)
+      } else {
+        MulRmOpF7Ext4(operand)
+      }
     }
     _ => raise UnsupportedMulOperand(operand)
   }
+  self.instrs.push(instr)
 }
 
 ///|
@@ -358,8 +487,7 @@ pub fn ASMContext::inc(
   self : ASMContext,
   operand : Operand,
 ) -> Unit raise ASMContextError {
-  self.instrs.push(Inc(operand))
-  match operand {
+  let instr = match operand {
     Reg(_) | Mem(_) => {
       let width = width_or_error(operand)
       self.emit_group_rm(
@@ -373,9 +501,15 @@ pub fn ASMContext::inc(
         rm_from_operand(operand),
         width == W64,
       )
+      if width == W8 {
+        IncRm8OpFEExt0(operand)
+      } else {
+        IncRmOpFFExt0(operand)
+      }
     }
     _ => raise UnsupportedIncOperand(operand)
   }
+  self.instrs.push(instr)
 }
 
 ///|
@@ -386,8 +520,7 @@ pub fn ASMContext::dec(
   self : ASMContext,
   operand : Operand,
 ) -> Unit raise ASMContextError {
-  self.instrs.push(Dec(operand))
-  match operand {
+  let instr = match operand {
     Reg(_) | Mem(_) => {
       let width = width_or_error(operand)
       self.emit_group_rm(
@@ -401,9 +534,15 @@ pub fn ASMContext::dec(
         rm_from_operand(operand),
         width == W64,
       )
+      if width == W8 {
+        DecRm8OpFEExt1(operand)
+      } else {
+        DecRmOpFFExt1(operand)
+      }
     }
     _ => raise UnsupportedDecOperand(operand)
   }
+  self.instrs.push(instr)
 }
 
 ///|
@@ -415,7 +554,6 @@ pub fn ASMContext::loop_rel8(
   self : ASMContext,
   label : Label,
 ) -> Unit raise ASMContextError {
-  self.instrs.push(LoopRel8(label))
   let src = self.mem_offset
   let rel = label.offset - (src + 2)
   if !fits_i8(rel) {
@@ -423,6 +561,7 @@ pub fn ASMContext::loop_rel8(
   }
   self.emit_byte(0xE2)
   self.emit_i8(rel)
+  self.instrs.push(LoopRcxRel8OpE2(label, rel))
 }
 
 ///|
@@ -443,7 +582,7 @@ fn ASMContext::emit_imul_imm(
   immediate : Immediate,
   lhs : Operand,
   rhs : Operand,
-) -> Unit raise ASMContextError {
+) -> Instr raise ASMContextError {
   let width = dst.width()
   ensure_not_byte_width(width, lhs, rhs)
   immediate.validate()
@@ -454,18 +593,22 @@ fn ASMContext::emit_imul_imm(
       }
       self.emit_reg_rm(width, 0x6B, dst, reg_as_rm(dst), width == W64)
       self.emit_i8(value)
+      IMulRegRmImm8Op6B(dst, Reg(dst), immediate)
     }
     (W16, Imm16(_)) => {
       self.emit_reg_rm(W16, 0x69, dst, reg_as_rm(dst), false)
       self.emit_immediate(immediate)
+      IMulRegRmImmOp69(dst, Reg(dst), immediate)
     }
     (W32, Imm32(_)) => {
       self.emit_reg_rm(W32, 0x69, dst, reg_as_rm(dst), false)
       self.emit_immediate(immediate)
+      IMulRegRmImmOp69(dst, Reg(dst), immediate)
     }
     (W64, Imm32(_)) => {
       self.emit_reg_rm(W64, 0x69, dst, reg_as_rm(dst), true)
       self.emit_immediate(immediate)
+      IMulRegRmImmOp69(dst, Reg(dst), immediate)
     }
     _ => raise OperandWidthMismatch(width, immediate.width())
   }
@@ -482,8 +625,7 @@ pub fn ASMContext::imul(
   lhs : Operand,
   rhs : Operand,
 ) -> Unit raise ASMContextError {
-  self.instrs.push(IMul(lhs, rhs))
-  match (lhs, rhs) {
+  let instr = match (lhs, rhs) {
     (Reg(dst), Reg(_) | Mem(_)) => {
       let width = require_same_width(lhs, rhs)
       ensure_not_byte_width(width, lhs, rhs)
@@ -495,10 +637,12 @@ pub fn ASMContext::imul(
         rm_from_operand(rhs),
         width == W64,
       )
+      IMulRegRmOp0FAF(dst, rhs)
     }
     (Reg(dst), Imm(immediate)) => self.emit_imul_imm(dst, immediate, lhs, rhs)
     _ => raise UnsupportedIMulOperands(lhs, rhs)
   }
+  self.instrs.push(instr)
 }
 
 ///|
@@ -508,29 +652,34 @@ fn ASMContext::emit_mov_reg_imm(
   immediate : Immediate,
   lhs : Operand,
   rhs : Operand,
-) -> Unit raise ASMContextError {
+) -> Instr raise ASMContextError {
   let width = dst.width()
   immediate.validate()
   match (width, immediate) {
     (W8, Imm8(_)) => {
       self.emit_opcode_register(W8, 0xB0, dst, false)
       self.emit_immediate(immediate)
+      MovReg8Imm8OpB0(dst, immediate)
     }
     (W16, Imm16(_)) => {
       self.emit_opcode_register(W16, 0xB8, dst, false)
       self.emit_immediate(immediate)
+      MovRegImmOpB8(dst, immediate)
     }
     (W32, Imm32(_)) => {
       self.emit_opcode_register(W32, 0xB8, dst, false)
       self.emit_immediate(immediate)
+      MovRegImmOpB8(dst, immediate)
     }
     (W64, Imm32(_)) => {
       self.emit_group_rm(W64, 0xC7, 0, reg_as_rm(dst), true)
       self.emit_immediate(immediate)
+      MovRmImmOpC7Ext0(Reg(dst), immediate)
     }
     (W64, Imm64(_)) => {
       self.emit_opcode_register(W64, 0xB8, dst, true)
       self.emit_immediate(immediate)
+      MovRegImmOpB8(dst, immediate)
     }
     _ => raise UnsupportedMovOperands(lhs, rhs)
   }
@@ -543,24 +692,28 @@ fn ASMContext::emit_mov_mem_imm(
   immediate : Immediate,
   lhs : Operand,
   rhs : Operand,
-) -> Unit raise ASMContextError {
+) -> Instr raise ASMContextError {
   immediate.validate()
   match (dst.size, immediate) {
     (W8, Imm8(_)) => {
       self.emit_group_rm(W8, 0xC6, 0, mem_as_rm(dst), false)
       self.emit_immediate(immediate)
+      MovRm8Imm8OpC6Ext0(Mem(dst), immediate)
     }
     (W16, Imm16(_)) => {
       self.emit_group_rm(W16, 0xC7, 0, mem_as_rm(dst), false)
       self.emit_immediate(immediate)
+      MovRmImmOpC7Ext0(Mem(dst), immediate)
     }
     (W32, Imm32(_)) => {
       self.emit_group_rm(W32, 0xC7, 0, mem_as_rm(dst), false)
       self.emit_immediate(immediate)
+      MovRmImmOpC7Ext0(Mem(dst), immediate)
     }
     (W64, Imm32(_)) => {
       self.emit_group_rm(W64, 0xC7, 0, mem_as_rm(dst), true)
       self.emit_immediate(immediate)
+      MovRmImmOpC7Ext0(Mem(dst), immediate)
     }
     _ => raise UnsupportedMovOperands(lhs, rhs)
   }
@@ -577,8 +730,7 @@ pub fn ASMContext::mov(
   lhs : Operand,
   rhs : Operand,
 ) -> Unit raise ASMContextError {
-  self.instrs.push(Mov(lhs, rhs))
-  match (lhs, rhs) {
+  let instr = match (lhs, rhs) {
     (Reg(dst), Reg(src)) => {
       let width = require_same_width(lhs, rhs)
       self.emit_reg_rm(
@@ -592,6 +744,11 @@ pub fn ASMContext::mov(
         reg_as_rm(dst),
         width == W64,
       )
+      if width == W8 {
+        MovRm8Reg8Op88(lhs, src)
+      } else {
+        MovRmRegOp89(lhs, src)
+      }
     }
     (Reg(dst), Mem(src)) => {
       let width = require_same_width(lhs, rhs)
@@ -606,6 +763,11 @@ pub fn ASMContext::mov(
         mem_as_rm(src),
         width == W64,
       )
+      if width == W8 {
+        MovReg8Rm8Op8A(dst, rhs)
+      } else {
+        MovRegRmOp8B(dst, rhs)
+      }
     }
     (Mem(dst), Reg(src)) => {
       let width = require_same_width(lhs, rhs)
@@ -620,6 +782,11 @@ pub fn ASMContext::mov(
         mem_as_rm(dst),
         width == W64,
       )
+      if width == W8 {
+        MovRm8Reg8Op88(lhs, src)
+      } else {
+        MovRmRegOp89(lhs, src)
+      }
     }
     (Reg(dst), Imm(immediate)) =>
       self.emit_mov_reg_imm(dst, immediate, lhs, rhs)
@@ -627,13 +794,14 @@ pub fn ASMContext::mov(
       self.emit_mov_mem_imm(dst, immediate, lhs, rhs)
     _ => raise UnsupportedMovOperands(lhs, rhs)
   }
+  self.instrs.push(instr)
 }
 
 ///|
 fn ASMContext::emit_push_imm(
   self : ASMContext,
   immediate : Immediate,
-) -> Unit raise ASMContextError {
+) -> Instr raise ASMContextError {
   immediate.validate()
   match immediate {
     Imm8(value) => {
@@ -642,15 +810,18 @@ fn ASMContext::emit_push_imm(
       }
       self.emit_byte(0x6A)
       self.emit_immediate(immediate)
+      PushImm8Op6A(immediate)
     }
     Imm16(_) => {
       self.emit_byte(0x66)
       self.emit_byte(0x68)
       self.emit_immediate(immediate)
+      PushImmOp68(immediate)
     }
     Imm32(_) => {
       self.emit_byte(0x68)
       self.emit_immediate(immediate)
+      PushImmOp68(immediate)
     }
     Imm64(_) => raise UnsupportedOperandWidth(Imm(immediate))
   }
@@ -665,23 +836,35 @@ pub fn ASMContext::push(
   self : ASMContext,
   operand : Operand,
 ) -> Unit raise ASMContextError {
-  self.instrs.push(Push(operand))
-  match operand {
+  let instr = match operand {
     Reg(register) =>
       match register.width() {
-        W16 => self.emit_opcode_register(W16, 0x50, register, false)
-        W64 => self.emit_opcode_register(W64, 0x50, register, false)
+        W16 => {
+          self.emit_opcode_register(W16, 0x50, register, false)
+          PushRegOp50(register)
+        }
+        W64 => {
+          self.emit_opcode_register(W64, 0x50, register, false)
+          PushRegOp50(register)
+        }
         _ => raise UnsupportedPushOperand(operand)
       }
     Mem(memory) =>
       match memory.size {
-        W16 => self.emit_group_rm(W16, 0xFF, 6, mem_as_rm(memory), false)
-        W64 => self.emit_group_rm(W64, 0xFF, 6, mem_as_rm(memory), false)
+        W16 => {
+          self.emit_group_rm(W16, 0xFF, 6, mem_as_rm(memory), false)
+          PushRmOpFFExt6(operand)
+        }
+        W64 => {
+          self.emit_group_rm(W64, 0xFF, 6, mem_as_rm(memory), false)
+          PushRmOpFFExt6(operand)
+        }
         _ => raise UnsupportedPushOperand(operand)
       }
     Imm(immediate) => self.emit_push_imm(immediate)
     _ => raise UnsupportedPushOperand(operand)
   }
+  self.instrs.push(instr)
 }
 
 ///|
@@ -692,36 +875,49 @@ pub fn ASMContext::pop(
   self : ASMContext,
   operand : Operand,
 ) -> Unit raise ASMContextError {
-  self.instrs.push(Pop(operand))
-  match operand {
+  let instr = match operand {
     Reg(register) =>
       match register.width() {
-        W16 => self.emit_opcode_register(W16, 0x58, register, false)
-        W64 => self.emit_opcode_register(W64, 0x58, register, false)
+        W16 => {
+          self.emit_opcode_register(W16, 0x58, register, false)
+          PopRegOp58(register)
+        }
+        W64 => {
+          self.emit_opcode_register(W64, 0x58, register, false)
+          PopRegOp58(register)
+        }
         _ => raise UnsupportedPopOperand(operand)
       }
     Mem(memory) =>
       match memory.size {
-        W16 => self.emit_group_rm(W16, 0x8F, 0, mem_as_rm(memory), false)
-        W64 => self.emit_group_rm(W64, 0x8F, 0, mem_as_rm(memory), false)
+        W16 => {
+          self.emit_group_rm(W16, 0x8F, 0, mem_as_rm(memory), false)
+          PopRmOp8FExt0(operand)
+        }
+        W64 => {
+          self.emit_group_rm(W64, 0x8F, 0, mem_as_rm(memory), false)
+          PopRmOp8FExt0(operand)
+        }
         _ => raise UnsupportedPopOperand(operand)
       }
     _ => raise UnsupportedPopOperand(operand)
   }
+  self.instrs.push(instr)
 }
 
 ///|
 /// Emit CALL rel32 to either an in-buffer label or an external symbol.
 pub fn ASMContext::call(self : ASMContext, target : Target) -> Unit {
-  self.instrs.push(Call(target))
   let dst = match target {
     Label(label) => label.offset
     Extern(dst) => dst
   }
-  self.emit_byte(0xE8)
   let src = self.mem_offset
   // x86 CALL rel32 is relative to the first byte after the displacement.
-  self.emit_i32(dst - (src + 4))
+  let rel = dst - (src + 5)
+  self.emit_byte(0xE8)
+  self.emit_i32(rel)
+  self.instrs.push(CallRel32OpE8(target, rel))
 }
 
 ///|
@@ -730,7 +926,7 @@ pub fn ASMContext::call(self : ASMContext, target : Target) -> Unit {
 /// The caller is responsible for loading the platform-specific syscall number
 /// and arguments into the required registers.
 pub fn ASMContext::syscall(self : ASMContext) -> Unit {
-  self.instrs.push(Syscall)
   self.emit_byte(0x0F)
   self.emit_byte(0x05)
+  self.instrs.push(SyscallOp0F05)
 }

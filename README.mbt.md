@@ -55,12 +55,52 @@ The public API currently emits these instructions:
 
 - `mov` for register, memory, and immediate integer forms
 - `add`, `sub`, and `xor` for register/memory with register or immediate forms
-- `mul` and two-operand `imul` for integer register/memory forms
+- `mul` and two-operand `imul` for integer register/memory or immediate forms
 - `inc`, `dec`, `push`, and `pop` for legal integer register/memory forms
 - `loop_rel8(Label)` for short RCX-counted loops
 - `call(Target)`, `syscall`, `nop`, and `ret`
 
 Unsupported operand combinations raise `ASMContextError` instead of aborting.
+
+## Labels, Calls, and Tracing
+
+Labels capture the current byte offset in a single `ASMContext`. Convert a label
+to a call target with `Label::target`. External call targets can be built with
+`ASMContext::extern_fn(name)`, which resolves a symbol in the current process and
+stores the relative target used by x86-64 `CALL rel32`.
+
+```mbt check
+///|
+test {
+  let ctx = @asm.ASMContext::new(start=0UL)
+
+  let target = ctx.label()
+  ctx.call(target.target())
+
+  assert_eq(ctx.bytes().length(), 5)
+}
+```
+
+`trace()` returns a copy of the successfully emitted opcode-form trace. The trace
+uses the public `Instr` enum, whose constructors name the concrete opcode form
+chosen by the encoder.
+
+```mbt check
+///|
+test {
+  let ctx = @asm.ASMContext::new(start=0UL)
+
+  ctx.nop()
+  ctx.ret()
+
+  let trace = ctx.trace()
+  let expected : Array[@asm.Instr] = [NopOp90, RetNearOpC3]
+  assert_true(trace == expected)
+
+  trace.push(SyscallOp0F05)
+  assert_true(ctx.trace() == expected)
+}
+```
 
 ## Encoding Notes
 
@@ -73,6 +113,18 @@ Unsupported operand combinations raise `ASMContextError` instead of aborting.
 - `rsp` cannot be a SIB index. `r12` can be an index because REX.X distinguishes
   it from `rsp`.
 - RIP-relative memory always uses a signed disp32 field.
+
+## Errors and Validation
+
+Most instruction helpers validate the requested form before appending bytes or
+trace entries. `ASMContextError` variants cover unsupported instruction forms,
+operand-width mismatches, out-of-range immediates, invalid memory addressing,
+high-8 register conflicts with REX, short-loop displacement overflow, allocation
+failure, and generated code that exceeds the executable allocation.
+
+`call` currently emits directly and does not raise an error for an out-of-range
+`rel32` displacement. Keep in-buffer labels and external call targets close
+enough for x86-64 relative calls until range validation is implemented.
 
 ## Native Notes
 
@@ -91,3 +143,16 @@ syscall table expose the platform's `SYS_*` values, which can be loaded into
 
 The allocator currently requests RWX memory to keep the example simple. That is
 convenient for experiments, but it is not the policy most production JITs use.
+
+## Known Limitations
+
+- `imm32`, normal memory displacements, RIP-relative displacements, and
+  `call rel32` are written as 4-byte fields. Very large `Int` values are not all
+  checked before emission yet, so keep them within the intended 32-bit range.
+- `ASMContext::extern_fn` does not currently report `dlopen` or `dlsym` failure.
+  A missing symbol can still produce a `Target`, so use known process symbols
+  and avoid treating it as a general-purpose dynamic linker API.
+- The width-specific memory helpers use internal high-8 register sentinels for
+  omitted `base` and `index` arguments. Do not pass `ah` as a memory base or
+  `ch` as an index; use the generic `mem(size=..., base=..., index=...)` helper
+  when you need explicit optional registers.

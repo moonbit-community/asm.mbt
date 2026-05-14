@@ -1,23 +1,57 @@
 ///|
-/// Debug representation of the instructions emitted into an `ASMContext`.
+/// Debug trace of the concrete x86 opcode forms emitted into an `ASMContext`.
 ///
 /// The encoder records these values alongside raw bytes so tests and future
-/// diagnostics can inspect the logical instruction stream without decoding
+/// diagnostics can inspect the encoded instruction stream without decoding
 /// machine code back from memory.
-enum Instr {
-  Ret
-  Mov(Operand, Operand)
-  Add(Operand, Operand)
-  Sub(Operand, Operand)
-  Mul(Operand)
-  IMul(Operand, Operand)
-  Xor(Operand, Operand)
-  Inc(Operand)
-  Dec(Operand)
-  Push(Operand)
-  Pop(Operand)
-  Call(Target)
-  LoopRel8(Label)
-  Nop
-  Syscall
-} derive(Debug)
+pub(all) enum Instr {
+  RetNearOpC3
+  NopOp90
+  SyscallOp0F05
+  CallRel32OpE8(Target, Int)
+  LoopRcxRel8OpE2(Label, Int)
+  MovRm8Reg8Op88(Operand, Register)
+  MovRmRegOp89(Operand, Register)
+  MovReg8Rm8Op8A(Register, Operand)
+  MovRegRmOp8B(Register, Operand)
+  MovReg8Imm8OpB0(Register, Immediate)
+  MovRegImmOpB8(Register, Immediate)
+  MovRm8Imm8OpC6Ext0(Operand, Immediate)
+  MovRmImmOpC7Ext0(Operand, Immediate)
+  AddRm8Reg8Op00(Operand, Register)
+  AddRmRegOp01(Operand, Register)
+  AddReg8Rm8Op02(Register, Operand)
+  AddRegRmOp03(Register, Operand)
+  AddRm8Imm8Op80Ext0(Operand, Immediate)
+  AddRmImmOp81Ext0(Operand, Immediate)
+  AddRmImm8SignExtOp83Ext0(Operand, Immediate)
+  SubRm8Reg8Op28(Operand, Register)
+  SubRmRegOp29(Operand, Register)
+  SubReg8Rm8Op2A(Register, Operand)
+  SubRegRmOp2B(Register, Operand)
+  SubRm8Imm8Op80Ext5(Operand, Immediate)
+  SubRmImmOp81Ext5(Operand, Immediate)
+  SubRmImm8SignExtOp83Ext5(Operand, Immediate)
+  XorRm8Reg8Op30(Operand, Register)
+  XorRmRegOp31(Operand, Register)
+  XorReg8Rm8Op32(Register, Operand)
+  XorRegRmOp33(Register, Operand)
+  XorRm8Imm8Op80Ext6(Operand, Immediate)
+  XorRmImmOp81Ext6(Operand, Immediate)
+  XorRmImm8SignExtOp83Ext6(Operand, Immediate)
+  MulRm8OpF6Ext4(Operand)
+  MulRmOpF7Ext4(Operand)
+  IMulRegRmOp0FAF(Register, Operand)
+  IMulRegRmImm8Op6B(Register, Operand, Immediate)
+  IMulRegRmImmOp69(Register, Operand, Immediate)
+  IncRm8OpFEExt0(Operand)
+  IncRmOpFFExt0(Operand)
+  DecRm8OpFEExt1(Operand)
+  DecRmOpFFExt1(Operand)
+  PushRegOp50(Register)
+  PushRmOpFFExt6(Operand)
+  PushImm8Op6A(Immediate)
+  PushImmOp68(Immediate)
+  PopRegOp58(Register)
+  PopRmOp8FExt0(Operand)
+} derive(Debug, Eq)
