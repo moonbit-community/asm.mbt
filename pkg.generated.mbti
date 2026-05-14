@@ -6,25 +6,173 @@ import {
 }
 
 // Values
+pub let ah : Register
+
+pub let al : Register
+
 pub fn alloc(mem_size? : UInt64) -> UInt64
+
+pub let ax : Register
+
+pub let bh : Register
+
+pub let bl : Register
+
+pub let bp : Register
+
+pub let bpl : Register
+
+pub let bx : Register
+
+pub let ch : Register
+
+pub let cl : Register
+
+pub let cx : Register
+
+pub let dh : Register
+
+pub let di : Register
+
+pub let dil : Register
+
+pub let dl : Register
+
+pub let dx : Register
+
+pub let eax : Register
+
+pub let ebp : Register
+
+pub let ebx : Register
+
+pub let ecx : Register
+
+pub let edi : Register
+
+pub let edx : Register
+
+pub let esi : Register
+
+pub let esp : Register
+
+pub fn imm16(Int) -> Operand
+
+pub fn imm32(Int) -> Operand
+
+pub fn imm64(Int64) -> Operand
+
+pub fn imm8(Int) -> Operand
 
 pub fn linux_syscall_number(String) -> Int?
 
-pub let rax : Operand
+pub fn mem(size~ : Width, base? : Register?, index? : Register?, scale? : Int, disp? : Int, segment? : Segment?) -> Operand
 
-pub let rbp : Operand
+pub fn mem16(base? : Register, index? : Register, scale? : Int, disp? : Int, segment? : Segment?) -> Operand
 
-pub let rbx : Operand
+pub fn mem32(base? : Register, index? : Register, scale? : Int, disp? : Int, segment? : Segment?) -> Operand
 
-pub let rcx : Operand
+pub fn mem64(base? : Register, index? : Register, scale? : Int, disp? : Int, segment? : Segment?) -> Operand
 
-pub let rdi : Operand
+pub fn mem8(base? : Register, index? : Register, scale? : Int, disp? : Int, segment? : Segment?) -> Operand
 
-pub let rdx : Operand
+pub let r10 : Register
 
-pub let rsi : Operand
+pub let r10b : Register
 
-pub let rsp : Operand
+pub let r10d : Register
+
+pub let r10w : Register
+
+pub let r11 : Register
+
+pub let r11b : Register
+
+pub let r11d : Register
+
+pub let r11w : Register
+
+pub let r12 : Register
+
+pub let r12b : Register
+
+pub let r12d : Register
+
+pub let r12w : Register
+
+pub let r13 : Register
+
+pub let r13b : Register
+
+pub let r13d : Register
+
+pub let r13w : Register
+
+pub let r14 : Register
+
+pub let r14b : Register
+
+pub let r14d : Register
+
+pub let r14w : Register
+
+pub let r15 : Register
+
+pub let r15b : Register
+
+pub let r15d : Register
+
+pub let r15w : Register
+
+pub let r8 : Register
+
+pub let r8b : Register
+
+pub let r8d : Register
+
+pub let r8w : Register
+
+pub let r9 : Register
+
+pub let r9b : Register
+
+pub let r9d : Register
+
+pub let r9w : Register
+
+pub let rax : Register
+
+pub let rbp : Register
+
+pub let rbx : Register
+
+pub let rcx : Register
+
+pub let rdi : Register
+
+pub let rdx : Register
+
+pub fn reg(Register) -> Operand
+
+pub fn rip16(Int, segment? : Segment?) -> Operand
+
+pub fn rip32(Int, segment? : Segment?) -> Operand
+
+pub fn rip64(Int, segment? : Segment?) -> Operand
+
+pub fn rip8(Int, segment? : Segment?) -> Operand
+
+pub let rsi : Register
+
+pub let rsp : Register
+
+pub let si : Register
+
+pub let sil : Register
+
+pub let sp : Register
+
+pub let spl : Register
 
 // Errors
 pub(all) suberror ASMContextError {
@@ -39,11 +187,20 @@ pub(all) suberror ASMContextError {
   UnsupportedMovOperands(Operand, Operand)
   UnsupportedPushOperand(Operand)
   UnsupportedPopOperand(Operand)
+  UnsupportedOperandWidth(Operand)
+  OperandWidthMismatch(Width, Width)
+  ImmediateOutOfRange(Immediate)
+  InvalidMemoryScale(Int)
+  InvalidMemoryBase(Register)
+  InvalidMemoryIndex(Register)
+  MemoryIndexCannotBeStackPointer(Register)
+  High8RexConflict
 } derive(@debug.Debug)
 
 // Types and methods
 type ASMContext
 pub fn ASMContext::add(Self, Operand, Operand) -> Unit raise ASMContextError
+pub fn ASMContext::bytes(Self) -> Bytes
 pub fn ASMContext::call(Self, Target) -> Unit
 pub fn ASMContext::dec(Self, Operand) -> Unit raise ASMContextError
 pub fn ASMContext::exec(Self) -> Int64
@@ -63,22 +220,87 @@ pub fn ASMContext::sub(Self, Operand, Operand) -> Unit raise ASMContextError
 pub fn ASMContext::syscall(Self) -> Unit
 pub fn ASMContext::xor(Self, Operand, Operand) -> Unit raise ASMContextError
 
+pub(all) enum GprBase {
+  A
+  C
+  D
+  B
+  SP
+  BP
+  SI
+  DI
+  R8
+  R9
+  R10
+  R11
+  R12
+  R13
+  R14
+  R15
+} derive(Eq, @debug.Debug)
+
+pub(all) enum High8Reg {
+  AH
+  CH
+  DH
+  BH
+} derive(Eq, @debug.Debug)
+
+pub(all) enum Immediate {
+  Imm8(Int)
+  Imm16(Int)
+  Imm32(Int)
+  Imm64(Int64)
+} derive(Eq, @debug.Debug)
+
 type Instr derive(@debug.Debug)
 
-type Label derive(@debug.Debug)
+type Label derive(Eq, @debug.Debug)
 pub fn Label::target(Self) -> Target
 
-pub(all) enum Operand {
-  Imm32(Int)
-  Reg(Reg)
-} derive(@debug.Debug)
+pub(all) struct Memory {
+  size : Width
+  base : Register?
+  index : Register?
+  scale : Int
+  disp : Int
+  segment : Segment?
+  rip_relative : Bool
+} derive(Eq, @debug.Debug)
 
-type Reg derive(@debug.Debug)
+pub(all) enum Operand {
+  Reg(Register)
+  Imm(Immediate)
+  Mem(Memory)
+  Rel(RelTarget)
+} derive(Eq, @debug.Debug)
+
+pub(all) enum Register {
+  Gpr(GprBase, Width)
+  High8(High8Reg)
+} derive(Eq, @debug.Debug)
+
+pub(all) enum RelTarget {
+  RelLabel(Label)
+  Rel32(Int)
+} derive(Eq, @debug.Debug)
+
+pub(all) enum Segment {
+  FS
+  GS
+} derive(Eq, @debug.Debug)
 
 pub(all) enum Target {
   Label(Label)
   Extern(Int)
-} derive(@debug.Debug)
+} derive(Eq, @debug.Debug)
+
+pub(all) enum Width {
+  W8
+  W16
+  W32
+  W64
+} derive(Eq, @debug.Debug)
 
 // Type aliases
 

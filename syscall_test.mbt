@@ -5,7 +5,7 @@ test "linux_syscall_getpid" {
   }
   let start = @asm.alloc()
   let ctx = @asm.ASMContext::new(start~)
-  ctx.mov(@asm.rax, Imm32(getpid))
+  ctx.mov(@asm.reg(@asm.rax), @asm.imm32(getpid))
   ctx.syscall()
   ctx.ret()
   assert_true(ctx.exec() > Int64::from_int(0))
