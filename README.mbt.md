@@ -81,6 +81,10 @@ This package targets `native` only and uses a C stub for `mmap`, `dlopen`,
 to return through `ret`; when calling C functions, preserve stack alignment and
 callee/caller-saved registers as required by the platform.
 
+`alloc` raises `ASMContextError` when executable memory allocation fails.
+`ASMContext::new` records the allocation size for buffers returned by `alloc`,
+and `exec` raises before copying if the generated code exceeds that size.
+
 On Linux, `linux_syscall_number("getpid")` and other names in the C stub's
 syscall table expose the platform's `SYS_*` values, which can be loaded into
 `rax` before emitting `syscall`.

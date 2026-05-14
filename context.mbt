@@ -11,6 +11,8 @@ struct ASMContext {
   code : @buffer.Buffer
   // Start address of the executable memory region.
   mem_ptr : UInt64
+  // Size of the executable memory region.
+  mem_size : UInt64
   // Current byte offset from `mem_ptr`.
   mut mem_offset : Int
 }
@@ -30,6 +32,9 @@ pub(all) suberror ASMContextError {
   UnsupportedMovOperands(Operand, Operand)
   UnsupportedPushOperand(Operand)
   UnsupportedPopOperand(Operand)
+  // Executable-memory lifecycle errors.
+  ExecutableMemoryAllocationFailed(UInt64, Int)
+  GeneratedCodeExceedsMemory(UInt64, UInt64)
   // Generic validation errors shared by the encoding layer.
   UnsupportedOperandWidth(Operand)
   OperandWidthMismatch(Width, Width)
@@ -43,11 +48,24 @@ pub(all) suberror ASMContextError {
 
 ///|
 /// Create a new code-generation context for an executable memory region.
-pub fn ASMContext::new(start~ : UInt64) -> ASMContext {
+///
+/// When `mem_size` is omitted, contexts created from `alloc` use the recorded
+/// allocation size. Raw pointers that were not returned by `alloc` fall back to
+/// the default allocation size.
+pub fn ASMContext::new(start~ : UInt64, mem_size? : UInt64 = 0UL) -> ASMContext {
+  let mem_size = if mem_size == 0UL {
+    match executable_allocation_size(start) {
+      Some(size) => size
+      None => default_exec_memory_size
+    }
+  } else {
+    mem_size
+  }
   ASMContext::{
     instrs: [],
     code: @buffer.new(size_hint=25),
     mem_ptr: start,
+    mem_size,
     mem_offset: 0,
   }
 }
@@ -94,9 +112,13 @@ pub fn ASMContext::bytes(self : ASMContext) -> Bytes {
 ///
 /// The generated function is expected to follow the platform ABI enough to
 /// return its result in RAX and preserve any registers required by its caller.
-pub fn ASMContext::exec(self : ASMContext) -> Int64 {
+pub fn ASMContext::exec(self : ASMContext) -> Int64 raise ASMContextError {
   let machcode = self.code.contents()
-  __exec(self.mem_ptr, machcode, machcode.length().to_uint64())
+  let code_size = machcode.length().to_uint64()
+  if code_size > self.mem_size {
+    raise GeneratedCodeExceedsMemory(code_size, self.mem_size)
+  }
+  __exec(self.mem_ptr, machcode, code_size)
 }
 
 ///|

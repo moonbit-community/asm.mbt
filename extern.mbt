@@ -13,7 +13,25 @@ type FnPointer = UInt64
 
 ///|
 /// Allocate one RWX memory region for generated code.
-extern "c" fn mmap(length : UInt64) -> MemPointer = "asm_dot_mbt_mmap"
+extern "c" fn __mmap(length : UInt64) -> MemPointer = "asm_dot_mbt_mmap"
+
+///|
+/// Check whether a raw mmap result is `MAP_FAILED`.
+extern "c" fn mmap_failed(pointer : MemPointer) -> Bool = "asm_dot_mbt_mmap_failed"
+
+///|
+/// Return the current C `errno` value.
+extern "c" fn errno() -> Int = "asm_dot_mbt_errno"
+
+///|
+/// Allocate one RWX memory region for generated code, raising on failure.
+fn mmap(length : UInt64) -> MemPointer raise ASMContextError {
+  let pointer = __mmap(length)
+  if mmap_failed(pointer) {
+    raise ExecutableMemoryAllocationFailed(length, errno())
+  }
+  pointer
+}
 
 ///|
 /// Open the current process as a dynamic-library handle.
