@@ -2,6 +2,7 @@
 
 1. Validate all 32-bit encoded fields before emission.
    - Risk: `imm32`, memory displacements, RIP-relative displacements, and `call rel32` are written as 4 bytes without range checks. Out-of-range `Int` values can silently truncate and generate wrong machine code.
+   - Call-specific task: make `ASMContext::call` compute the final rel32 displacement before emitting, verify it fits signed 32-bit range, and raise a structured error without changing `bytes()` or `trace()` on failure.
    - Suggested fix: add signed/unsigned range helpers for each encoded field and raise structured `ASMContextError` variants before emitting bytes.
 
 2. Make external symbol resolution fallible.
