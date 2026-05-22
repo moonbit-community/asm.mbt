@@ -63,7 +63,7 @@ pub fn ASMContext::new(start~ : UInt64, mem_size? : UInt64 = 0UL) -> ASMContext 
   }
   ASMContext::{
     instrs: [],
-    code: @buffer.new(size_hint=25),
+    code: Buffer(size_hint=25),
     mem_ptr: start,
     mem_size,
     mem_offset: 0,
