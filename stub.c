@@ -33,6 +33,10 @@ void* asm_dot_mbt_dlopen() {
     return dlopen(NULL, RTLD_LAZY | RTLD_GLOBAL);
 }
 
+int32_t asm_dot_mbt_lib_handle_is_null(void* handle) {
+    return handle == NULL;
+}
+
 #if defined(__linux__)
 #define ASM_DOT_MBT_SYSCALL_MATCH(name, value) \
     if (strcmp(syscall_name, name) == 0) {     \

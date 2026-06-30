@@ -10,7 +10,7 @@ pub(all) enum Segment {
 pub(all) enum Immediate {
   Imm8(Int)
   Imm16(Int)
-  Imm32(Int)
+  Imm32(Int64)
   Imm64(Int64)
 } derive(Debug, Eq)
 
@@ -25,7 +25,7 @@ pub(all) struct Memory {
   base : Register?
   index : Register?
   scale : Int
-  disp : Int
+  disp : Int64
   segment : Segment?
   rip_relative : Bool
 } derive(Debug, Eq)
@@ -35,7 +35,7 @@ pub(all) struct Memory {
 /// immediates.
 pub(all) enum RelTarget {
   RelLabel(Label)
-  Rel32(Int)
+  Rel32(Int64)
 } derive(Debug, Eq)
 
 ///|
@@ -64,7 +64,7 @@ struct Label {
 /// relative displacement.
 pub(all) enum Target {
   Label(Label)
-  Extern(Int)
+  Extern(Int64)
 } derive(Debug, Eq)
 
 ///|
@@ -104,9 +104,10 @@ pub fn imm16(value : Int) -> Operand {
 ///|
 /// Build a 32-bit immediate operand.
 ///
-/// Many 64-bit integer instructions encode `imm32` and sign-extend it to the
-/// operand width, matching the x86-64 instruction tables.
-pub fn imm32(value : Int) -> Operand {
+/// Generic imm32 fields accept signed 32-bit values and unsigned 32-bit bit
+/// patterns (`-2147483648L..4294967295L`). Instruction forms that sign-extend
+/// imm32 to 64 bits reject values outside the signed 32-bit range.
+pub fn imm32(value : Int64) -> Operand {
   Imm(Imm32(value))
 }
 
@@ -125,7 +126,7 @@ fn memory(
   base : Register?,
   index : Register?,
   scale : Int,
-  disp : Int,
+  disp : Int64,
   segment : Segment?,
   rip_relative : Bool,
 ) -> Operand {
@@ -136,34 +137,18 @@ fn memory(
 /// Build an explicit-width memory operand.
 ///
 /// `base` and `index` must be 64-bit GPRs when present. `scale` must be one of
-/// `1`, `2`, `4`, or `8`. Use the width-specific helpers (`mem8`, `mem16`,
-/// `mem32`, `mem64`) for the common forms.
+/// `1`, `2`, `4`, or `8`; `disp` must fit the signed 32-bit field whenever the
+/// selected addressing form needs disp32. Use the width-specific helpers
+/// (`mem8`, `mem16`, `mem32`, `mem64`) for the common forms.
 pub fn mem(
   size~ : Width,
   base? : Register? = None,
   index? : Register? = None,
   scale? : Int = 1,
-  disp? : Int = 0,
+  disp? : Int64 = 0L,
   segment? : Segment? = None,
 ) -> Operand {
   memory(size, base, index, scale, disp, segment, false)
-}
-
-///|
-/// Convert the public width-specific helper defaults into optional registers.
-///
-/// MoonBit optional labeled arguments cannot use `None` for a non-optional
-/// `Register` parameter, so the public helpers use private sentinel defaults
-/// and translate them here before encoding.
-fn optional_memory_register(
-  register : Register,
-  sentinel : High8Reg,
-) -> Register? {
-  match (register, sentinel) {
-    (High8(AH), AH) => None
-    (High8(CH), CH) => None
-    _ => Some(register)
-  }
 }
 
 ///|
@@ -171,21 +156,13 @@ fn optional_memory_register(
 ///
 /// Omitting both `base` and `index` encodes an absolute disp32 memory operand.
 pub fn mem8(
-  base? : Register = High8(AH),
-  index? : Register = High8(CH),
+  base? : Register,
+  index? : Register,
   scale? : Int = 1,
-  disp? : Int = 0,
+  disp? : Int64 = 0L,
   segment? : Segment? = None,
 ) -> Operand {
-  memory(
-    W8,
-    optional_memory_register(base, AH),
-    optional_memory_register(index, CH),
-    scale,
-    disp,
-    segment,
-    false,
-  )
+  memory(W8, base, index, scale, disp, segment, false)
 }
 
 ///|
@@ -194,41 +171,25 @@ pub fn mem8(
 /// This controls the data width, not the address width; addresses are still
 /// 64-bit mode addresses.
 pub fn mem16(
-  base? : Register = High8(AH),
-  index? : Register = High8(CH),
+  base? : Register,
+  index? : Register,
   scale? : Int = 1,
-  disp? : Int = 0,
+  disp? : Int64 = 0L,
   segment? : Segment? = None,
 ) -> Operand {
-  memory(
-    W16,
-    optional_memory_register(base, AH),
-    optional_memory_register(index, CH),
-    scale,
-    disp,
-    segment,
-    false,
-  )
+  memory(W16, base, index, scale, disp, segment, false)
 }
 
 ///|
 /// Build a 32-bit memory operand.
 pub fn mem32(
-  base? : Register = High8(AH),
-  index? : Register = High8(CH),
+  base? : Register,
+  index? : Register,
   scale? : Int = 1,
-  disp? : Int = 0,
+  disp? : Int64 = 0L,
   segment? : Segment? = None,
 ) -> Operand {
-  memory(
-    W32,
-    optional_memory_register(base, AH),
-    optional_memory_register(index, CH),
-    scale,
-    disp,
-    segment,
-    false,
-  )
+  memory(W32, base, index, scale, disp, segment, false)
 }
 
 ///|
@@ -237,38 +198,30 @@ pub fn mem32(
 /// Examples include `mem64(base=rax)`, `mem64(base=rbp, disp=-8)`, and
 /// `mem64(base=rax, index=r12, scale=4, disp=8)`.
 pub fn mem64(
-  base? : Register = High8(AH),
-  index? : Register = High8(CH),
+  base? : Register,
+  index? : Register,
   scale? : Int = 1,
-  disp? : Int = 0,
+  disp? : Int64 = 0L,
   segment? : Segment? = None,
 ) -> Operand {
-  memory(
-    W64,
-    optional_memory_register(base, AH),
-    optional_memory_register(index, CH),
-    scale,
-    disp,
-    segment,
-    false,
-  )
+  memory(W64, base, index, scale, disp, segment, false)
 }
 
 ///|
 /// Build an 8-bit RIP-relative memory operand.
-pub fn rip8(disp : Int, segment? : Segment? = None) -> Operand {
+pub fn rip8(disp : Int64, segment? : Segment? = None) -> Operand {
   memory(W8, None, None, 1, disp, segment, true)
 }
 
 ///|
 /// Build a 16-bit RIP-relative memory operand.
-pub fn rip16(disp : Int, segment? : Segment? = None) -> Operand {
+pub fn rip16(disp : Int64, segment? : Segment? = None) -> Operand {
   memory(W16, None, None, 1, disp, segment, true)
 }
 
 ///|
 /// Build a 32-bit RIP-relative memory operand.
-pub fn rip32(disp : Int, segment? : Segment? = None) -> Operand {
+pub fn rip32(disp : Int64, segment? : Segment? = None) -> Operand {
   memory(W32, None, None, 1, disp, segment, true)
 }
 
@@ -277,6 +230,6 @@ pub fn rip32(disp : Int, segment? : Segment? = None) -> Operand {
 ///
 /// RIP-relative memory always uses the ModR/M `mod=00 r/m=101` form with a
 /// disp32 field in 64-bit mode.
-pub fn rip64(disp : Int, segment? : Segment? = None) -> Operand {
+pub fn rip64(disp : Int64, segment? : Segment? = None) -> Operand {
   memory(W64, None, None, 1, disp, segment, true)
 }

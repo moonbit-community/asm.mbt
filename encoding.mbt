@@ -16,7 +16,7 @@ priv struct EncodedRm {
   // Optional SIB byte required by rsp/r12 bases or scaled index addressing.
   sib : Byte?
   // Signed displacement value, encoded using `disp_size` bytes.
-  disp : Int
+  disp : Int64
   disp_size : Int
   // REX bits contributed by the r/m base and SIB index fields.
   rex_b : Bool
@@ -50,6 +50,11 @@ fn fits_i8(value : Int) -> Bool {
 }
 
 ///|
+fn fits_i8_i64(value : Int64) -> Bool {
+  value >= -128L && value <= 127L
+}
+
+///|
 fn fits_imm8(value : Int) -> Bool {
   value >= -128 && value <= 255
 }
@@ -57,6 +62,16 @@ fn fits_imm8(value : Int) -> Bool {
 ///|
 fn fits_imm16(value : Int) -> Bool {
   value >= -32768 && value <= 65535
+}
+
+///|
+fn fits_i32(value : Int64) -> Bool {
+  value >= -2147483648L && value <= 2147483647L
+}
+
+///|
+fn fits_imm32(value : Int64) -> Bool {
+  value >= -2147483648L && value <= 4294967295L
 }
 
 ///|
@@ -96,8 +111,18 @@ fn Immediate::validate(self : Immediate) -> Unit raise ASMContextError {
   match self {
     Imm8(value) => if !fits_imm8(value) { raise ImmediateOutOfRange(self) }
     Imm16(value) => if !fits_imm16(value) { raise ImmediateOutOfRange(self) }
-    Imm32(_) => ()
+    Imm32(value) => if !fits_imm32(value) { raise ImmediateOutOfRange(self) }
     Imm64(_) => ()
+  }
+}
+
+///|
+fn Immediate::validate_signed_imm32(
+  self : Immediate,
+) -> Unit raise ASMContextError {
+  match self {
+    Imm32(value) => if !fits_i32(value) { raise ImmediateOutOfRange(self) }
+    _ => self.validate()
   }
 }
 
@@ -168,13 +193,18 @@ fn memory_index(register : Register) -> GprBase raise ASMContextError {
 ///
 /// rbp/r13 with no displacement cannot use `mod=00` because that encoding
 /// means disp32 or RIP-relative, so they are emitted as disp8 = 0.
-fn mod_disp_for_base(base : GprBase, disp : Int) -> ModDisp {
+fn mod_disp_for_base(
+  base : GprBase,
+  disp : Int64,
+) -> ModDisp raise ASMContextError {
   if disp == 0 && !base.is_base_pointer_encoding() {
     { mod_bits: 0, disp_size: 0 }
-  } else if fits_i8(disp) {
+  } else if fits_i8_i64(disp) {
     { mod_bits: 1, disp_size: 1 }
-  } else {
+  } else if fits_i32(disp) {
     { mod_bits: 2, disp_size: 4 }
+  } else {
+    raise MemoryDisplacementOutOfRange(disp)
   }
 }
 
@@ -207,6 +237,9 @@ fn encode_memory_rm(
   memory : Memory,
 ) -> EncodedRm raise ASMContextError {
   if memory.rip_relative {
+    if !fits_i32(memory.disp) {
+      raise MemoryDisplacementOutOfRange(memory.disp)
+    }
     // In 64-bit mode, mod=00 r/m=101 is RIP-relative regardless of REX.B.
     // Keep rex_b false so this never accidentally becomes the r13 base form.
     {
@@ -274,6 +307,9 @@ fn encode_memory_rm(
       }
       None => {
         // No base uses the SIB base=101 form with a mandatory disp32.
+        if !fits_i32(memory.disp) {
+          raise MemoryDisplacementOutOfRange(memory.disp)
+        }
         let index_bits = match index {
           Some(index) => index.low3()
           None => 4
@@ -311,9 +347,15 @@ fn JITContext::emit_i16(self : JITContext, value : Int) -> Unit {
 }
 
 ///|
-fn JITContext::emit_i32(self : JITContext, value : Int) -> Unit {
-  self.code.write_int_le(value)
-  self.mem_offset += 4
+fn JITContext::emit_i8_i64(self : JITContext, value : Int64) -> Unit {
+  self.emit_byte(value.to_byte())
+}
+
+///|
+fn JITContext::emit_i32(self : JITContext, value : Int64) -> Unit {
+  for shift in [0, 8, 16, 24] {
+    self.emit_byte(((value >> shift) & 0xFFL).to_byte())
+  }
 }
 
 ///|
@@ -385,7 +427,7 @@ fn JITContext::emit_encoded_rm(self : JITContext, encoded : EncodedRm) -> Unit {
   }
   match encoded.disp_size {
     0 => ()
-    1 => self.emit_i8(encoded.disp)
+    1 => self.emit_i8_i64(encoded.disp)
     4 => self.emit_i32(encoded.disp)
     _ => ()
   }

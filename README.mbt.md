@@ -48,6 +48,11 @@ or the generic `mem(size=...)`. Addressing is the 64-bit ModR/M + SIB form:
 optional base, optional index, scale `1/2/4/8`, signed displacement, optional
 `FS`/`GS`, and dedicated RIP-relative helpers such as `rip64(disp)`.
 
+`imm32` and memory displacements use `Int64` values so callers can express the
+full encoded field. Generic `imm32` fields accept signed 32-bit values and
+unsigned 32-bit bit patterns; 64-bit forms that sign-extend `imm32` accept only
+the signed 32-bit range.
+
 ## Supported Instructions
 
 The public API currently emits these instructions:
@@ -66,7 +71,9 @@ Unsupported operand combinations raise `ASMContextError` instead of aborting.
 Labels capture the current byte offset in a single `JITContext`. Convert a label
 to a call target with `Label::target`. External call targets can be built with
 `JITContext::extern_fn(name)`, which resolves a symbol in the current process and
-stores the relative target used by x86-64 `CALL rel32`.
+stores the relative target used by x86-64 `CALL rel32`. Missing external symbols
+raise `ASMContextError`, and `call` raises before emission if the final
+displacement cannot fit in signed rel32.
 
 ```mbt check
 ///|
@@ -112,19 +119,19 @@ test {
 - `rsp` cannot be a SIB index. `r12` can be an index because REX.X distinguishes
   it from `rsp`.
 - RIP-relative memory always uses a signed disp32 field.
+- Passing `ah`, `ch`, `dh`, or `bh` as a memory base or index is rejected as an
+  invalid address register; omitted base and index arguments are represented
+  with optional labels, not register sentinels.
 
 ## Errors and Validation
 
 Most instruction helpers validate the requested form before appending bytes or
 trace entries. `ASMContextError` variants cover unsupported instruction forms,
-operand-width mismatches, out-of-range immediates, invalid memory addressing,
-high-8 register conflicts with REX, short-loop displacement overflow, allocation
-failure, `mprotect` failure, generated code that exceeds the executable
-allocation, and repeated finalization.
-
-`call` currently emits directly and does not raise an error for an out-of-range
-`rel32` displacement. Keep in-buffer labels and external call targets close
-enough for x86-64 relative calls until range validation is implemented.
+operand-width mismatches, out-of-range immediates, out-of-range memory
+displacements, out-of-range `call rel32`, invalid memory addressing, high-8
+register conflicts with REX, short-loop displacement overflow, dynamic symbol
+resolution failure, allocation failure, `mprotect` failure, generated code that
+exceeds the executable allocation, and repeated finalization.
 
 ## Native Notes
 
@@ -147,15 +154,7 @@ stored by the `JITFunction`. For `JITFunction[() -> Int64]`,
 
 ## Known Limitations
 
-- `imm32`, normal memory displacements, RIP-relative displacements, and
-  `call rel32` are written as 4-byte fields. Very large `Int` values are not all
-  checked before emission yet, so keep them within the intended 32-bit range.
-- `JITContext::extern_fn` does not currently report `dlopen` or `dlsym` failure.
-  A missing symbol can still produce a `Target`, so use known process symbols
-  and avoid treating it as a general-purpose dynamic linker API.
+- `JITContext::extern_fn` only resolves symbols already available in the current
+  process; it is not a general-purpose dynamic-library loading API.
 - Finalized mappings are intentionally not manually freed in v1, so any returned
   `FuncRef` cannot dangle because of an explicit dispose call.
-- The width-specific memory helpers use internal high-8 register sentinels for
-  omitted `base` and `index` arguments. Do not pass `ah` as a memory base or
-  `ch` as an index; use the generic `mem(size=..., base=..., index=...)` helper
-  when you need explicit optional registers.

@@ -4,7 +4,7 @@ test "linux_syscall_getpid" {
     fail("expected getpid syscall number on Linux")
   }
   let ctx = @asm.JITContext::new()
-  ctx.mov(@asm.reg(@asm.rax), @asm.imm32(getpid))
+  ctx.mov(@asm.reg(@asm.rax), @asm.imm32(getpid.to_int64()))
   ctx.syscall()
   ctx.ret()
   assert_true(ctx.finalize_fn_i64().call() > Int64::from_int(0))

@@ -3,7 +3,7 @@ fn const_i64(
   value : Int,
 ) -> @asm.JITFunction[() -> Int64] raise @asm.ASMContextError {
   let ctx = @asm.JITContext::new()
-  ctx.mov(@asm.reg(@asm.rax), @asm.imm32(value))
+  ctx.mov(@asm.reg(@asm.rax), @asm.imm32(value.to_int64()))
   ctx.ret()
   ctx.finalize_fn_i64()
 }
