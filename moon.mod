@@ -4,7 +4,7 @@ version = "0.0.1"
 
 readme = "README.mbt.md"
 
-repository = ""
+repository = "https://github.com/moonbit-community/asm.mbt"
 
 license = "Apache-2.0"
 
