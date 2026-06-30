@@ -10,8 +10,6 @@ pub let ah : Register
 
 pub let al : Register
 
-pub fn alloc(mem_size? : UInt64) -> UInt64 raise ASMContextError
-
 pub let ax : Register
 
 pub let bh : Register
@@ -189,6 +187,8 @@ pub(all) suberror ASMContextError {
   UnsupportedPopOperand(Operand)
   ExecutableMemoryAllocationFailed(UInt64, Int)
   GeneratedCodeExceedsMemory(UInt64, UInt64)
+  ExecutableMemoryProtectionFailed(UInt64, UInt64, Int)
+  JITContextAlreadyFinalized
   UnsupportedOperandWidth(Operand)
   OperandWidthMismatch(Width, Width)
   ImmediateOutOfRange(Immediate)
@@ -200,29 +200,6 @@ pub(all) suberror ASMContextError {
 } derive(@debug.Debug)
 
 // Types and methods
-type ASMContext
-pub fn ASMContext::add(Self, Operand, Operand) -> Unit raise ASMContextError
-pub fn ASMContext::bytes(Self) -> Bytes
-pub fn ASMContext::call(Self, Target) -> Unit
-pub fn ASMContext::dec(Self, Operand) -> Unit raise ASMContextError
-pub fn ASMContext::exec(Self) -> Int64 raise ASMContextError
-pub fn ASMContext::extern_fn(Self, String) -> Target
-pub fn ASMContext::imul(Self, Operand, Operand) -> Unit raise ASMContextError
-pub fn ASMContext::inc(Self, Operand) -> Unit raise ASMContextError
-pub fn ASMContext::label(Self) -> Label
-pub fn ASMContext::loop_rel8(Self, Label) -> Unit raise ASMContextError
-pub fn ASMContext::mov(Self, Operand, Operand) -> Unit raise ASMContextError
-pub fn ASMContext::mul(Self, Operand) -> Unit raise ASMContextError
-pub fn ASMContext::new(start~ : UInt64, mem_size? : UInt64) -> Self
-pub fn ASMContext::nop(Self) -> Unit
-pub fn ASMContext::pop(Self, Operand) -> Unit raise ASMContextError
-pub fn ASMContext::push(Self, Operand) -> Unit raise ASMContextError
-pub fn ASMContext::ret(Self) -> Unit
-pub fn ASMContext::sub(Self, Operand, Operand) -> Unit raise ASMContextError
-pub fn ASMContext::syscall(Self) -> Unit
-pub fn ASMContext::trace(Self) -> Array[Instr]
-pub fn ASMContext::xor(Self, Operand, Operand) -> Unit raise ASMContextError
-
 pub(all) enum GprBase {
   A
   C
@@ -307,6 +284,33 @@ pub(all) enum Instr {
   PopRegOp58(Register)
   PopRmOp8FExt0(Operand)
 } derive(Eq, @debug.Debug)
+
+type JITContext
+pub fn JITContext::add(Self, Operand, Operand) -> Unit raise ASMContextError
+pub fn JITContext::bytes(Self) -> Bytes
+pub fn JITContext::call(Self, Target) -> Unit
+pub fn JITContext::dec(Self, Operand) -> Unit raise ASMContextError
+pub fn JITContext::extern_fn(Self, String) -> Target
+pub fn JITContext::finalize_fn_i64(Self) -> JITFunction[() -> Int64] raise ASMContextError
+pub fn JITContext::imul(Self, Operand, Operand) -> Unit raise ASMContextError
+pub fn JITContext::inc(Self, Operand) -> Unit raise ASMContextError
+pub fn JITContext::label(Self) -> Label
+pub fn JITContext::loop_rel8(Self, Label) -> Unit raise ASMContextError
+pub fn JITContext::mov(Self, Operand, Operand) -> Unit raise ASMContextError
+pub fn JITContext::mul(Self, Operand) -> Unit raise ASMContextError
+pub fn JITContext::new(mem_size? : UInt64) -> Self raise ASMContextError
+pub fn JITContext::nop(Self) -> Unit
+pub fn JITContext::pop(Self, Operand) -> Unit raise ASMContextError
+pub fn JITContext::push(Self, Operand) -> Unit raise ASMContextError
+pub fn JITContext::ret(Self) -> Unit
+pub fn JITContext::sub(Self, Operand, Operand) -> Unit raise ASMContextError
+pub fn JITContext::syscall(Self) -> Unit
+pub fn JITContext::trace(Self) -> Array[Instr]
+pub fn JITContext::xor(Self, Operand, Operand) -> Unit raise ASMContextError
+
+type JITFunction[T]
+pub fn JITFunction::call(Self[() -> Int64]) -> Int64
+pub fn[T] JITFunction::func_ref(Self[T]) -> FuncRef[T]
 
 type Label derive(Eq, @debug.Debug)
 pub fn Label::target(Self) -> Target

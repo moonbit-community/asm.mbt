@@ -1,10 +1,10 @@
 ///|
 /// Mutable builder for one x86-64 machine-code buffer.
 ///
-/// An `ASMContext` appends encoded bytes to an internal buffer and tracks the
-/// byte offset used by labels and relative jumps. The caller provides the
-/// executable memory start address, usually from `alloc`.
-struct ASMContext {
+/// A `JITContext` owns one writable code mapping while it builds machine code.
+/// It appends encoded bytes to an internal buffer and tracks the byte offset
+/// used by labels and relative jumps.
+struct JITContext {
   // Logical instruction trace retained for debugging and future diagnostics.
   instrs : Array[Instr]
   // Encoded machine-code bytes waiting to be copied into executable memory.
@@ -15,7 +15,13 @@ struct ASMContext {
   mem_size : UInt64
   // Current byte offset from `mem_ptr`.
   mut mem_offset : Int
+  // Whether this context has already produced a `JITFunction`.
+  mut finalized : Bool
 }
+
+///|
+/// Finalized machine-code function with a known callable signature.
+struct JITFunction[T](FuncRef[T])
 
 ///|
 /// Errors raised when an instruction helper cannot encode the requested form.
@@ -35,6 +41,8 @@ pub(all) suberror ASMContextError {
   // Executable-memory lifecycle errors.
   ExecutableMemoryAllocationFailed(UInt64, Int)
   GeneratedCodeExceedsMemory(UInt64, UInt64)
+  ExecutableMemoryProtectionFailed(UInt64, UInt64, Int)
+  JITContextAlreadyFinalized
   // Generic validation errors shared by the encoding layer.
   UnsupportedOperandWidth(Operand)
   OperandWidthMismatch(Width, Width)
@@ -47,26 +55,18 @@ pub(all) suberror ASMContextError {
 } derive(Debug)
 
 ///|
-/// Create a new code-generation context for an executable memory region.
-///
-/// When `mem_size` is omitted, contexts created from `alloc` use the recorded
-/// allocation size. Raw pointers that were not returned by `alloc` fall back to
-/// the default allocation size.
-pub fn ASMContext::new(start~ : UInt64, mem_size? : UInt64 = 0UL) -> ASMContext {
-  let mem_size = if mem_size == 0UL {
-    match executable_allocation_size(start) {
-      Some(size) => size
-      None => default_exec_memory_size
-    }
-  } else {
-    mem_size
-  }
+/// Create a new code-generation context backed by one writable memory mapping.
+pub fn JITContext::new(
+  mem_size? : UInt64 = default_exec_memory_size,
+) -> JITContext raise ASMContextError {
+  let start = allocate_jit_memory(mem_size)
   {
     instrs: [],
     code: Buffer(size_hint=25),
     mem_ptr: start,
     mem_size,
     mem_offset: 0,
+    finalized: false,
   }
 }
 
@@ -74,7 +74,7 @@ pub fn ASMContext::new(start~ : UInt64, mem_size? : UInt64 = 0UL) -> ASMContext 
 /// Capture the current byte offset as a label.
 ///
 /// Use this before emitting a backward branch or as a local call target.
-pub fn ASMContext::label(self : ASMContext) -> Label {
+pub fn JITContext::label(self : JITContext) -> Label {
   { offset: self.mem_offset }
 }
 
@@ -83,7 +83,7 @@ pub fn ASMContext::label(self : ASMContext) -> Label {
 ///
 /// The returned target stores an offset relative to this context's code buffer,
 /// matching x86-64 CALL rel32 encoding.
-pub fn ASMContext::extern_fn(self : ASMContext, name : String) -> Target {
+pub fn JITContext::extern_fn(self : JITContext, name : String) -> Target {
   let handle = dlopen()
   let fn_pointer = dlsym(handle, name)
   let rel = if fn_pointer > self.mem_ptr {
@@ -96,47 +96,69 @@ pub fn ASMContext::extern_fn(self : ASMContext, name : String) -> Target {
 
 ///|
 /// Append a single byte and advance the current code offset.
-fn ASMContext::emit_byte(self : ASMContext, i : Byte) -> Unit {
+fn JITContext::emit_byte(self : JITContext, i : Byte) -> Unit {
   self.code.write_byte(i)
   self.mem_offset += 1
 }
 
 ///|
 /// Return a copy of the generated machine-code bytes.
-pub fn ASMContext::bytes(self : ASMContext) -> Bytes {
+pub fn JITContext::bytes(self : JITContext) -> Bytes {
   self.code.contents()
 }
 
 ///|
 /// Return a copy of the successfully emitted instruction trace.
-pub fn ASMContext::trace(self : ASMContext) -> Array[Instr] {
+pub fn JITContext::trace(self : JITContext) -> Array[Instr] {
   self.instrs.copy()
 }
 
 ///|
-/// Copy the generated code into executable memory and call it as `fn() -> Int64`.
+/// Copy the generated code into its mapping and make it executable.
 ///
 /// The generated function is expected to follow the platform ABI enough to
 /// return its result in RAX and preserve any registers required by its caller.
-pub fn ASMContext::exec(self : ASMContext) -> Int64 raise ASMContextError {
+pub fn JITContext::finalize_fn_i64(
+  self : JITContext,
+) -> JITFunction[() -> Int64] raise ASMContextError {
+  if self.finalized {
+    raise JITContextAlreadyFinalized
+  }
   let machcode = self.code.contents()
   let code_size = machcode.length().to_uint64()
   if code_size > self.mem_size {
     raise GeneratedCodeExceedsMemory(code_size, self.mem_size)
   }
-  __exec(self.mem_ptr, machcode, code_size)
+  copy_code(self.mem_ptr, machcode, code_size)
+  mprotect_rx(self.mem_ptr, self.mem_size)
+  self.finalized = true
+  JITFunction(code_func_ref_i64(self.mem_ptr))
+}
+
+///|
+/// Return this finalized function as a callable MoonBit function reference.
+pub fn[T] JITFunction::func_ref(self : JITFunction[T]) -> FuncRef[T] {
+  let JITFunction(func) = self
+  func
+}
+
+///|
+/// Call this finalized function.
+pub fn JITFunction::call(self : JITFunction[() -> Int64]) -> Int64 {
+  let f : FuncRef[() -> Int64] = self.func_ref()
+  f()
 }
 
 ///|
 /// Emit a one-byte NOP instruction.
-pub fn ASMContext::nop(self : ASMContext) -> Unit {
+pub fn JITContext::nop(self : JITContext) -> Unit {
   self.emit_byte(0x90)
   self.instrs.push(NopOp90)
 }
 
 ///|
 /// Emit a RET instruction.
-pub fn ASMContext::ret(self : ASMContext) -> Unit {
+pub fn JITContext::ret(self : JITContext) -> Unit {
   self.emit_byte(0xC3)
   self.instrs.push(RetNearOpC3)
 }
@@ -254,8 +276,8 @@ fn binary_rm_imm8_sign_ext_instr(
 /// Width-specific matching is explicit here because x86-64 has no generic
 /// "immediate with operand width" rule: 64-bit operations usually consume
 /// sign-extended imm32, while byte operations use opcode 80.
-fn ASMContext::emit_binary_imm(
-  self : ASMContext,
+fn JITContext::emit_binary_imm(
+  self : JITContext,
   width : Width,
   extension : Byte,
   dst : Operand,
@@ -316,8 +338,8 @@ fn ASMContext::emit_binary_imm(
 ///|
 /// Shared implementation for ADD/SUB/XOR register, memory, and immediate
 /// forms.
-fn ASMContext::emit_binary(
-  self : ASMContext,
+fn JITContext::emit_binary(
+  self : JITContext,
   lhs : Operand,
   rhs : Operand,
   opcode_rm_reg8 : Byte,
@@ -398,8 +420,8 @@ fn ASMContext::emit_binary(
 ///
 /// Supported forms include `reg/mem += reg`, `reg += mem`, and `reg/mem += imm`
 /// when operand widths and immediate encoding widths are legal.
-pub fn ASMContext::add(
-  self : ASMContext,
+pub fn JITContext::add(
+  self : JITContext,
   lhs : Operand,
   rhs : Operand,
 ) -> Unit raise ASMContextError {
@@ -415,8 +437,8 @@ pub fn ASMContext::add(
 /// Emit SUB.
 ///
 /// Supported forms mirror `add`, with the left operand as the destination.
-pub fn ASMContext::sub(
-  self : ASMContext,
+pub fn JITContext::sub(
+  self : JITContext,
   lhs : Operand,
   rhs : Operand,
 ) -> Unit raise ASMContextError {
@@ -432,8 +454,8 @@ pub fn ASMContext::sub(
 /// Emit XOR.
 ///
 /// Supported forms mirror `add`, with the left operand as the destination.
-pub fn ASMContext::xor(
-  self : ASMContext,
+pub fn JITContext::xor(
+  self : JITContext,
   lhs : Operand,
   rhs : Operand,
 ) -> Unit raise ASMContextError {
@@ -450,8 +472,8 @@ pub fn ASMContext::xor(
 ///
 /// The implicit accumulator and result registers are defined by the operand
 /// width, following the x86 integer `MUL r/m` instruction.
-pub fn ASMContext::mul(
-  self : ASMContext,
+pub fn JITContext::mul(
+  self : JITContext,
   operand : Operand,
 ) -> Unit raise ASMContextError {
   let instr = match operand {
@@ -483,8 +505,8 @@ pub fn ASMContext::mul(
 /// Emit INC.
 ///
 /// Supports byte, word, dword, and qword register/memory operands.
-pub fn ASMContext::inc(
-  self : ASMContext,
+pub fn JITContext::inc(
+  self : JITContext,
   operand : Operand,
 ) -> Unit raise ASMContextError {
   let instr = match operand {
@@ -516,8 +538,8 @@ pub fn ASMContext::inc(
 /// Emit DEC.
 ///
 /// Supports byte, word, dword, and qword register/memory operands.
-pub fn ASMContext::dec(
-  self : ASMContext,
+pub fn JITContext::dec(
+  self : JITContext,
   operand : Operand,
 ) -> Unit raise ASMContextError {
   let instr = match operand {
@@ -550,8 +572,8 @@ pub fn ASMContext::dec(
 ///
 /// The branch target must be within -128..127 bytes from the next instruction.
 /// `RCX` is decremented by the CPU and the branch is taken while it is nonzero.
-pub fn ASMContext::loop_rel8(
-  self : ASMContext,
+pub fn JITContext::loop_rel8(
+  self : JITContext,
   label : Label,
 ) -> Unit raise ASMContextError {
   let src = self.mem_offset
@@ -576,8 +598,8 @@ fn ensure_not_byte_width(
 }
 
 ///|
-fn ASMContext::emit_imul_imm(
-  self : ASMContext,
+fn JITContext::emit_imul_imm(
+  self : JITContext,
   dst : Register,
   immediate : Immediate,
   lhs : Operand,
@@ -620,8 +642,8 @@ fn ASMContext::emit_imul_imm(
 /// Supported forms are two-operand `imul(reg, reg/mem)` and
 /// `imul(reg, imm)`. The register/register form uses the standard `0F AF /r`
 /// encoding.
-pub fn ASMContext::imul(
-  self : ASMContext,
+pub fn JITContext::imul(
+  self : JITContext,
   lhs : Operand,
   rhs : Operand,
 ) -> Unit raise ASMContextError {
@@ -646,8 +668,8 @@ pub fn ASMContext::imul(
 }
 
 ///|
-fn ASMContext::emit_mov_reg_imm(
-  self : ASMContext,
+fn JITContext::emit_mov_reg_imm(
+  self : JITContext,
   dst : Register,
   immediate : Immediate,
   lhs : Operand,
@@ -686,8 +708,8 @@ fn ASMContext::emit_mov_reg_imm(
 }
 
 ///|
-fn ASMContext::emit_mov_mem_imm(
-  self : ASMContext,
+fn JITContext::emit_mov_mem_imm(
+  self : JITContext,
   dst : Memory,
   immediate : Immediate,
   lhs : Operand,
@@ -725,8 +747,8 @@ fn ASMContext::emit_mov_mem_imm(
 /// Supports register/register, register/memory, memory/register,
 /// register/immediate, and memory/immediate integer forms. Memory operands must
 /// carry an explicit width.
-pub fn ASMContext::mov(
-  self : ASMContext,
+pub fn JITContext::mov(
+  self : JITContext,
   lhs : Operand,
   rhs : Operand,
 ) -> Unit raise ASMContextError {
@@ -798,8 +820,8 @@ pub fn ASMContext::mov(
 }
 
 ///|
-fn ASMContext::emit_push_imm(
-  self : ASMContext,
+fn JITContext::emit_push_imm(
+  self : JITContext,
   immediate : Immediate,
 ) -> Instr raise ASMContextError {
   immediate.validate()
@@ -832,8 +854,8 @@ fn ASMContext::emit_push_imm(
 ///
 /// Supports 16-bit and 64-bit register/memory operands, plus encodable
 /// immediate forms.
-pub fn ASMContext::push(
-  self : ASMContext,
+pub fn JITContext::push(
+  self : JITContext,
   operand : Operand,
 ) -> Unit raise ASMContextError {
   let instr = match operand {
@@ -871,8 +893,8 @@ pub fn ASMContext::push(
 /// Emit POP.
 ///
 /// Supports 16-bit and 64-bit register/memory operands.
-pub fn ASMContext::pop(
-  self : ASMContext,
+pub fn JITContext::pop(
+  self : JITContext,
   operand : Operand,
 ) -> Unit raise ASMContextError {
   let instr = match operand {
@@ -907,7 +929,7 @@ pub fn ASMContext::pop(
 
 ///|
 /// Emit CALL rel32 to either an in-buffer label or an external symbol.
-pub fn ASMContext::call(self : ASMContext, target : Target) -> Unit {
+pub fn JITContext::call(self : JITContext, target : Target) -> Unit {
   let dst = match target {
     Label(label) => label.offset
     Extern(dst) => dst
@@ -925,7 +947,7 @@ pub fn ASMContext::call(self : ASMContext, target : Target) -> Unit {
 ///
 /// The caller is responsible for loading the platform-specific syscall number
 /// and arguments into the required registers.
-pub fn ASMContext::syscall(self : ASMContext) -> Unit {
+pub fn JITContext::syscall(self : JITContext) -> Unit {
   self.emit_byte(0x0F)
   self.emit_byte(0x05)
   self.instrs.push(SyscallOp0F05)

@@ -299,33 +299,33 @@ fn encode_memory_rm(
 }
 
 ///|
-fn ASMContext::emit_i8(self : ASMContext, value : Int) -> Unit {
+fn JITContext::emit_i8(self : JITContext, value : Int) -> Unit {
   self.emit_byte(value.to_byte())
 }
 
 ///|
-fn ASMContext::emit_i16(self : ASMContext, value : Int) -> Unit {
+fn JITContext::emit_i16(self : JITContext, value : Int) -> Unit {
   for shift in [0, 8] {
     self.emit_byte(((value >> shift) & 0xFF).to_byte())
   }
 }
 
 ///|
-fn ASMContext::emit_i32(self : ASMContext, value : Int) -> Unit {
+fn JITContext::emit_i32(self : JITContext, value : Int) -> Unit {
   self.code.write_int_le(value)
   self.mem_offset += 4
 }
 
 ///|
-fn ASMContext::emit_i64(self : ASMContext, value : Int64) -> Unit {
+fn JITContext::emit_i64(self : JITContext, value : Int64) -> Unit {
   for shift in [0, 8, 16, 24, 32, 40, 48, 56] {
     self.emit_byte(((value >> shift) & 0xFFL).to_byte())
   }
 }
 
 ///|
-fn ASMContext::emit_immediate(
-  self : ASMContext,
+fn JITContext::emit_immediate(
+  self : JITContext,
   immediate : Immediate,
 ) -> Unit raise ASMContextError {
   immediate.validate()
@@ -342,8 +342,8 @@ fn ASMContext::emit_immediate(
 ///
 /// REX is emitted only when needed, except that spl/bpl/sil/dil force a bare
 /// REX prefix to select the low 8-bit register names.
-fn ASMContext::emit_prefixes(
-  self : ASMContext,
+fn JITContext::emit_prefixes(
+  self : JITContext,
   width : Width,
   segment : Segment?,
   rex_w : Bool,
@@ -377,7 +377,7 @@ fn ASMContext::emit_prefixes(
 }
 
 ///|
-fn ASMContext::emit_encoded_rm(self : ASMContext, encoded : EncodedRm) -> Unit {
+fn JITContext::emit_encoded_rm(self : JITContext, encoded : EncodedRm) -> Unit {
   self.emit_byte(encoded.modrm)
   match encoded.sib {
     Some(sib) => self.emit_byte(sib)
@@ -392,8 +392,8 @@ fn ASMContext::emit_encoded_rm(self : ASMContext, encoded : EncodedRm) -> Unit {
 }
 
 ///|
-fn ASMContext::emit_reg_rm(
-  self : ASMContext,
+fn JITContext::emit_reg_rm(
+  self : JITContext,
   width : Width,
   opcode : Byte,
   reg_field : Register,
@@ -416,8 +416,8 @@ fn ASMContext::emit_reg_rm(
 }
 
 ///|
-fn ASMContext::emit_reg_rm_2(
-  self : ASMContext,
+fn JITContext::emit_reg_rm_2(
+  self : JITContext,
   width : Width,
   opcode1 : Byte,
   opcode2 : Byte,
@@ -442,8 +442,8 @@ fn ASMContext::emit_reg_rm_2(
 }
 
 ///|
-fn ASMContext::emit_group_rm(
-  self : ASMContext,
+fn JITContext::emit_group_rm(
+  self : JITContext,
   width : Width,
   opcode : Byte,
   extension : Byte,
@@ -466,8 +466,8 @@ fn ASMContext::emit_group_rm(
 }
 
 ///|
-fn ASMContext::emit_opcode_register(
-  self : ASMContext,
+fn JITContext::emit_opcode_register(
+  self : JITContext,
   width : Width,
   opcode_base : Byte,
   register : Register,

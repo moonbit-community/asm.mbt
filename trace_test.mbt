@@ -1,11 +1,11 @@
 ///|
-fn trace_context() -> @asm.ASMContext {
-  @asm.ASMContext::new(start=0UL)
+fn trace_context() -> @asm.JITContext raise @asm.ASMContextError {
+  @asm.JITContext::new()
 }
 
 ///|
 fn expect_failed_emit_preserved(
-  ctx : @asm.ASMContext,
+  ctx : @asm.JITContext,
   before_bytes : Bytes,
   before_trace : Array[@asm.Instr],
   emit : () -> Unit raise @asm.ASMContextError,
