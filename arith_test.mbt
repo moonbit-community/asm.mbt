@@ -15,11 +15,8 @@ test "arithmetic_immediates" {
 test "unsupported_operand_raises_context_error" {
   let start = @asm.alloc()
   let ctx = @asm.ASMContext::new(start~)
-  let result : Result[Unit, @asm.ASMContextError] = try? ctx.add(
-    @asm.imm32(1),
-    @asm.reg(@asm.rax),
-  )
-  guard result is Err(UnsupportedAddOperands(Imm(Imm32(1)), _)) else {
+  guard @test.expect_error(() => ctx.add(@asm.imm32(1), @asm.reg(@asm.rax)))
+    is UnsupportedAddOperands(Imm(Imm32(1)), _) else {
     fail("expected UnsupportedAddOperands")
   }
 }

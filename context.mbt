@@ -61,7 +61,7 @@ pub fn ASMContext::new(start~ : UInt64, mem_size? : UInt64 = 0UL) -> ASMContext 
   } else {
     mem_size
   }
-  ASMContext::{
+  {
     instrs: [],
     code: Buffer(size_hint=25),
     mem_ptr: start,
@@ -75,7 +75,7 @@ pub fn ASMContext::new(start~ : UInt64, mem_size? : UInt64 = 0UL) -> ASMContext 
 ///
 /// Use this before emitting a backward branch or as a local call target.
 pub fn ASMContext::label(self : ASMContext) -> Label {
-  Label::{ offset: self.mem_offset }
+  { offset: self.mem_offset }
 }
 
 ///|

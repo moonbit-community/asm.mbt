@@ -100,11 +100,8 @@ test "imul_reg_reg_uses_standard_two_operand_opcode" {
 ///|
 test "invalid_high8_rex_conflict" {
   let ctx = byte_context()
-  let result : Result[Unit, @asm.ASMContextError] = try? ctx.mov(
-    @asm.reg(@asm.ah),
-    @asm.reg(@asm.r8b),
-  )
-  guard result is Err(High8RexConflict) else {
+  guard @test.expect_error(() => ctx.mov(@asm.reg(@asm.ah), @asm.reg(@asm.r8b)))
+    is High8RexConflict else {
     fail("expected High8RexConflict")
   }
 }
@@ -112,11 +109,10 @@ test "invalid_high8_rex_conflict" {
 ///|
 test "invalid_rsp_index" {
   let ctx = byte_context()
-  let result : Result[Unit, @asm.ASMContextError] = try? ctx.mov(
-    @asm.reg(@asm.rax),
-    @asm.mem64(index=@asm.rsp),
-  )
-  guard result is Err(MemoryIndexCannotBeStackPointer(_)) else {
+  guard @test.expect_error(() => {
+      ctx.mov(@asm.reg(@asm.rax), @asm.mem64(index=@asm.rsp))
+    })
+    is MemoryIndexCannotBeStackPointer(_) else {
     fail("expected MemoryIndexCannotBeStackPointer")
   }
 }
@@ -124,11 +120,8 @@ test "invalid_rsp_index" {
 ///|
 test "invalid_immediate_range" {
   let ctx = byte_context()
-  let result : Result[Unit, @asm.ASMContextError] = try? ctx.mov(
-    @asm.reg(@asm.al),
-    @asm.imm8(300),
-  )
-  guard result is Err(ImmediateOutOfRange(Imm8(300))) else {
+  guard @test.expect_error(() => ctx.mov(@asm.reg(@asm.al), @asm.imm8(300)))
+    is ImmediateOutOfRange(Imm8(300)) else {
     fail("expected ImmediateOutOfRange")
   }
 }
@@ -136,11 +129,10 @@ test "invalid_immediate_range" {
 ///|
 test "invalid_memory_width_mismatch" {
   let ctx = byte_context()
-  let result : Result[Unit, @asm.ASMContextError] = try? ctx.mov(
-    @asm.reg(@asm.rax),
-    @asm.mem32(base=@asm.rax),
-  )
-  guard result is Err(OperandWidthMismatch(W64, W32)) else {
+  guard @test.expect_error(() => {
+      ctx.mov(@asm.reg(@asm.rax), @asm.mem32(base=@asm.rax))
+    })
+    is OperandWidthMismatch(W64, W32) else {
     fail("expected OperandWidthMismatch")
   }
 }
