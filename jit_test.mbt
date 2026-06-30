@@ -17,7 +17,7 @@ test "jit_function_call_runs_finalized_code" {
 ///|
 test "jit_function_func_ref_is_callable" {
   let fn0 = const_i64(91)
-  let f : FuncRef[() -> Int64] = fn0.func_ref()
+  let f : FuncRef[() -> Int64] = fn0.get_fn()
   assert_eq(f(), 91)
 }
 

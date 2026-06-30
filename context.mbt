@@ -137,7 +137,7 @@ pub fn JITContext::finalize_fn_i64(
 
 ///|
 /// Return this finalized function as a callable MoonBit function reference.
-pub fn[T] JITFunction::func_ref(self : JITFunction[T]) -> FuncRef[T] {
+pub fn[T] JITFunction::get_fn(self : JITFunction[T]) -> FuncRef[T] {
   let JITFunction(func) = self
   func
 }
@@ -145,7 +145,7 @@ pub fn[T] JITFunction::func_ref(self : JITFunction[T]) -> FuncRef[T] {
 ///|
 /// Call this finalized function.
 pub fn JITFunction::call(self : JITFunction[() -> Int64]) -> Int64 {
-  let f : FuncRef[() -> Int64] = self.func_ref()
+  let f : FuncRef[() -> Int64] = self.get_fn()
   f()
 }
 
