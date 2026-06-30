@@ -4,15 +4,16 @@ fn trace_context() -> @asm.ASMContext {
 }
 
 ///|
-fn assert_failed_emit_preserved(
+fn expect_failed_emit_preserved(
   ctx : @asm.ASMContext,
   before_bytes : Bytes,
   before_trace : Array[@asm.Instr],
-  result : Result[Unit, @asm.ASMContextError],
-) -> Unit raise {
-  guard result is Err(_) else { fail("expected emit failure") }
+  emit : () -> Unit raise @asm.ASMContextError,
+) -> @asm.ASMContextError raise {
+  let error = @test.expect_error(emit)
   assert_eq(ctx.bytes(), before_bytes)
   assert_true(ctx.trace() == before_trace)
+  error
 }
 
 ///|
@@ -121,93 +122,99 @@ test "unsupported_helper_failures_preserve_bytes_and_trace" {
   sub_ctx.nop()
   let before_bytes = sub_ctx.bytes()
   let before_trace = sub_ctx.trace()
-  let sub_result : Result[Unit, @asm.ASMContextError] = try? sub_ctx.sub(
-    @asm.imm32(1),
-    @asm.reg(@asm.rax),
+  let sub_error = expect_failed_emit_preserved(
+    sub_ctx,
+    before_bytes,
+    before_trace,
+    () => sub_ctx.sub(@asm.imm32(1), @asm.reg(@asm.rax)),
   )
-  guard sub_result is Err(UnsupportedSubOperands(_, _)) else {
+  guard sub_error is UnsupportedSubOperands(_, _) else {
     fail("expected UnsupportedSubOperands")
   }
-  assert_failed_emit_preserved(sub_ctx, before_bytes, before_trace, sub_result)
 
   let xor_ctx = trace_context()
   xor_ctx.nop()
   let before_bytes = xor_ctx.bytes()
   let before_trace = xor_ctx.trace()
-  let xor_result : Result[Unit, @asm.ASMContextError] = try? xor_ctx.xor(
-    @asm.imm32(1),
-    @asm.reg(@asm.rax),
+  let xor_error = expect_failed_emit_preserved(
+    xor_ctx,
+    before_bytes,
+    before_trace,
+    () => xor_ctx.xor(@asm.imm32(1), @asm.reg(@asm.rax)),
   )
-  guard xor_result is Err(UnsupportedXorOperands(_, _)) else {
+  guard xor_error is UnsupportedXorOperands(_, _) else {
     fail("expected UnsupportedXorOperands")
   }
-  assert_failed_emit_preserved(xor_ctx, before_bytes, before_trace, xor_result)
 
   let mul_ctx = trace_context()
   mul_ctx.nop()
   let before_bytes = mul_ctx.bytes()
   let before_trace = mul_ctx.trace()
-  let mul_result : Result[Unit, @asm.ASMContextError] = try? mul_ctx.mul(
-    @asm.imm32(1),
+  let mul_error = expect_failed_emit_preserved(
+    mul_ctx,
+    before_bytes,
+    before_trace,
+    () => mul_ctx.mul(@asm.imm32(1)),
   )
-  guard mul_result is Err(UnsupportedMulOperand(_)) else {
+  guard mul_error is UnsupportedMulOperand(_) else {
     fail("expected UnsupportedMulOperand")
   }
-  assert_failed_emit_preserved(mul_ctx, before_bytes, before_trace, mul_result)
 
   let imul_ctx = trace_context()
   imul_ctx.nop()
   let before_bytes = imul_ctx.bytes()
   let before_trace = imul_ctx.trace()
-  let imul_result : Result[Unit, @asm.ASMContextError] = try? imul_ctx.imul(
-    @asm.mem64(base=@asm.rax),
-    @asm.reg(@asm.rcx),
+  let imul_error = expect_failed_emit_preserved(
+    imul_ctx,
+    before_bytes,
+    before_trace,
+    () => imul_ctx.imul(@asm.mem64(base=@asm.rax), @asm.reg(@asm.rcx)),
   )
-  guard imul_result is Err(UnsupportedIMulOperands(_, _)) else {
+  guard imul_error is UnsupportedIMulOperands(_, _) else {
     fail("expected UnsupportedIMulOperands")
   }
-  assert_failed_emit_preserved(
-    imul_ctx, before_bytes, before_trace, imul_result,
-  )
 
   let mov_ctx = trace_context()
   mov_ctx.nop()
   let before_bytes = mov_ctx.bytes()
   let before_trace = mov_ctx.trace()
-  let mov_result : Result[Unit, @asm.ASMContextError] = try? mov_ctx.mov(
-    @asm.imm32(1),
-    @asm.reg(@asm.rax),
+  let mov_error = expect_failed_emit_preserved(
+    mov_ctx,
+    before_bytes,
+    before_trace,
+    () => mov_ctx.mov(@asm.imm32(1), @asm.reg(@asm.rax)),
   )
-  guard mov_result is Err(UnsupportedMovOperands(_, _)) else {
+  guard mov_error is UnsupportedMovOperands(_, _) else {
     fail("expected UnsupportedMovOperands")
   }
-  assert_failed_emit_preserved(mov_ctx, before_bytes, before_trace, mov_result)
 
   let push_ctx = trace_context()
   push_ctx.nop()
   let before_bytes = push_ctx.bytes()
   let before_trace = push_ctx.trace()
-  let push_result : Result[Unit, @asm.ASMContextError] = try? push_ctx.push(
-    @asm.reg(@asm.eax),
+  let push_error = expect_failed_emit_preserved(
+    push_ctx,
+    before_bytes,
+    before_trace,
+    () => push_ctx.push(@asm.reg(@asm.eax)),
   )
-  guard push_result is Err(UnsupportedPushOperand(_)) else {
+  guard push_error is UnsupportedPushOperand(_) else {
     fail("expected UnsupportedPushOperand")
   }
-  assert_failed_emit_preserved(
-    push_ctx, before_bytes, before_trace, push_result,
-  )
 
   let pop_ctx = trace_context()
   pop_ctx.nop()
   let before_bytes = pop_ctx.bytes()
   let before_trace = pop_ctx.trace()
-  let pop_result : Result[Unit, @asm.ASMContextError] = try? pop_ctx.pop(
-    @asm.reg(@asm.eax),
+  let pop_error = expect_failed_emit_preserved(
+    pop_ctx,
+    before_bytes,
+    before_trace,
+    () => pop_ctx.pop(@asm.reg(@asm.eax)),
   )
-  guard pop_result is Err(UnsupportedPopOperand(_)) else {
+  guard pop_error is UnsupportedPopOperand(_) else {
     fail("expected UnsupportedPopOperand")
   }
-  assert_failed_emit_preserved(pop_ctx, before_bytes, before_trace, pop_result)
 }
 
 ///|
@@ -216,75 +223,71 @@ test "validation_failures_preserve_bytes_and_trace" {
   width_ctx.nop()
   let before_bytes = width_ctx.bytes()
   let before_trace = width_ctx.trace()
-  let width_result : Result[Unit, @asm.ASMContextError] = try? width_ctx.add(
-    @asm.reg(@asm.rax),
-    @asm.reg(@asm.ecx),
+  let width_error = expect_failed_emit_preserved(
+    width_ctx,
+    before_bytes,
+    before_trace,
+    () => width_ctx.add(@asm.reg(@asm.rax), @asm.reg(@asm.ecx)),
   )
-  guard width_result is Err(OperandWidthMismatch(W64, W32)) else {
+  guard width_error is OperandWidthMismatch(W64, W32) else {
     fail("expected OperandWidthMismatch")
   }
-  assert_failed_emit_preserved(
-    width_ctx, before_bytes, before_trace, width_result,
-  )
 
   let scale_ctx = trace_context()
   scale_ctx.nop()
   let before_bytes = scale_ctx.bytes()
   let before_trace = scale_ctx.trace()
-  let scale_result : Result[Unit, @asm.ASMContextError] = try? scale_ctx.mov(
-    @asm.reg(@asm.rax),
-    @asm.mem64(base=@asm.rax, scale=3),
+  let scale_error = expect_failed_emit_preserved(
+    scale_ctx,
+    before_bytes,
+    before_trace,
+    () => scale_ctx.mov(@asm.reg(@asm.rax), @asm.mem64(base=@asm.rax, scale=3)),
   )
-  guard scale_result is Err(InvalidMemoryScale(3)) else {
+  guard scale_error is InvalidMemoryScale(3) else {
     fail("expected InvalidMemoryScale")
   }
-  assert_failed_emit_preserved(
-    scale_ctx, before_bytes, before_trace, scale_result,
-  )
 
   let base_ctx = trace_context()
   base_ctx.nop()
   let before_bytes = base_ctx.bytes()
   let before_trace = base_ctx.trace()
-  let base_result : Result[Unit, @asm.ASMContextError] = try? base_ctx.mov(
-    @asm.reg(@asm.rax),
-    @asm.mem64(base=@asm.eax),
+  let base_error = expect_failed_emit_preserved(
+    base_ctx,
+    before_bytes,
+    before_trace,
+    () => base_ctx.mov(@asm.reg(@asm.rax), @asm.mem64(base=@asm.eax)),
   )
-  guard base_result is Err(InvalidMemoryBase(_)) else {
+  guard base_error is InvalidMemoryBase(_) else {
     fail("expected InvalidMemoryBase")
   }
-  assert_failed_emit_preserved(
-    base_ctx, before_bytes, before_trace, base_result,
-  )
 
   let index_ctx = trace_context()
   index_ctx.nop()
   let before_bytes = index_ctx.bytes()
   let before_trace = index_ctx.trace()
-  let index_result : Result[Unit, @asm.ASMContextError] = try? index_ctx.mov(
-    @asm.reg(@asm.rax),
-    @asm.mem64(index=@asm.eax),
+  let index_error = expect_failed_emit_preserved(
+    index_ctx,
+    before_bytes,
+    before_trace,
+    () => index_ctx.mov(@asm.reg(@asm.rax), @asm.mem64(index=@asm.eax)),
   )
-  guard index_result is Err(InvalidMemoryIndex(_)) else {
+  guard index_error is InvalidMemoryIndex(_) else {
     fail("expected InvalidMemoryIndex")
   }
-  assert_failed_emit_preserved(
-    index_ctx, before_bytes, before_trace, index_result,
-  )
 
   let unsupported_width_ctx = trace_context()
   unsupported_width_ctx.nop()
   let before_bytes = unsupported_width_ctx.bytes()
   let before_trace = unsupported_width_ctx.trace()
-  let unsupported_width_result : Result[Unit, @asm.ASMContextError] = try? unsupported_width_ctx.push(
-    @asm.imm64(1L),
+  let unsupported_width_error = expect_failed_emit_preserved(
+    unsupported_width_ctx,
+    before_bytes,
+    before_trace,
+    () => unsupported_width_ctx.push(@asm.imm64(1L)),
   )
-  guard unsupported_width_result is Err(UnsupportedOperandWidth(Imm(Imm64(1L)))) else {
+  guard unsupported_width_error is UnsupportedOperandWidth(Imm(Imm64(1L))) else {
     fail("expected UnsupportedOperandWidth")
   }
-  assert_failed_emit_preserved(
-    unsupported_width_ctx, before_bytes, before_trace, unsupported_width_result,
-  )
 }
 
 ///|
@@ -293,29 +296,29 @@ test "failed_emits_preserve_bytes_and_trace" {
   unsupported.nop()
   let before_bytes = unsupported.bytes()
   let before_trace = unsupported.trace()
-  let unsupported_result : Result[Unit, @asm.ASMContextError] = try? unsupported.add(
-    @asm.imm32(1),
-    @asm.reg(@asm.rax),
+  let unsupported_error = expect_failed_emit_preserved(
+    unsupported,
+    before_bytes,
+    before_trace,
+    () => unsupported.add(@asm.imm32(1), @asm.reg(@asm.rax)),
   )
-  guard unsupported_result is Err(UnsupportedAddOperands(_, _)) else {
+  guard unsupported_error is UnsupportedAddOperands(_, _) else {
     fail("expected UnsupportedAddOperands")
   }
-  assert_failed_emit_preserved(
-    unsupported, before_bytes, before_trace, unsupported_result,
-  )
 
   let high8 = trace_context()
   high8.nop()
   let before_bytes = high8.bytes()
   let before_trace = high8.trace()
-  let high8_result : Result[Unit, @asm.ASMContextError] = try? high8.mov(
-    @asm.reg(@asm.ah),
-    @asm.reg(@asm.r8b),
+  let high8_error = expect_failed_emit_preserved(
+    high8,
+    before_bytes,
+    before_trace,
+    () => high8.mov(@asm.reg(@asm.ah), @asm.reg(@asm.r8b)),
   )
-  guard high8_result is Err(High8RexConflict) else {
+  guard high8_error is High8RexConflict else {
     fail("expected High8RexConflict")
   }
-  assert_failed_emit_preserved(high8, before_bytes, before_trace, high8_result)
 
   let loop_ctx = trace_context()
   let loop_target = loop_ctx.label()
@@ -324,43 +327,41 @@ test "failed_emits_preserve_bytes_and_trace" {
   }
   let before_bytes = loop_ctx.bytes()
   let before_trace = loop_ctx.trace()
-  let loop_result : Result[Unit, @asm.ASMContextError] = try? loop_ctx.loop_rel8(
-    loop_target,
+  let loop_error = expect_failed_emit_preserved(
+    loop_ctx,
+    before_bytes,
+    before_trace,
+    () => loop_ctx.loop_rel8(loop_target),
   )
-  guard loop_result is Err(LoopRel8OutOfRange(_)) else {
+  guard loop_error is LoopRel8OutOfRange(_) else {
     fail("expected LoopRel8OutOfRange")
   }
-  assert_failed_emit_preserved(
-    loop_ctx, before_bytes, before_trace, loop_result,
-  )
 
   let immediate = trace_context()
   immediate.nop()
   let before_bytes = immediate.bytes()
   let before_trace = immediate.trace()
-  let immediate_result : Result[Unit, @asm.ASMContextError] = try? immediate.mov(
-    @asm.reg(@asm.al),
-    @asm.imm8(300),
+  let immediate_error = expect_failed_emit_preserved(
+    immediate,
+    before_bytes,
+    before_trace,
+    () => immediate.mov(@asm.reg(@asm.al), @asm.imm8(300)),
   )
-  guard immediate_result is Err(ImmediateOutOfRange(Imm8(300))) else {
+  guard immediate_error is ImmediateOutOfRange(Imm8(300)) else {
     fail("expected ImmediateOutOfRange")
   }
-  assert_failed_emit_preserved(
-    immediate, before_bytes, before_trace, immediate_result,
-  )
 
   let memory = trace_context()
   memory.nop()
   let before_bytes = memory.bytes()
   let before_trace = memory.trace()
-  let memory_result : Result[Unit, @asm.ASMContextError] = try? memory.mov(
-    @asm.reg(@asm.rax),
-    @asm.mem64(index=@asm.rsp),
+  let memory_error = expect_failed_emit_preserved(
+    memory,
+    before_bytes,
+    before_trace,
+    () => memory.mov(@asm.reg(@asm.rax), @asm.mem64(index=@asm.rsp)),
   )
-  guard memory_result is Err(MemoryIndexCannotBeStackPointer(_)) else {
+  guard memory_error is MemoryIndexCannotBeStackPointer(_) else {
     fail("expected MemoryIndexCannotBeStackPointer")
   }
-  assert_failed_emit_preserved(
-    memory, before_bytes, before_trace, memory_result,
-  )
 }

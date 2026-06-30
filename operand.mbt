@@ -129,7 +129,7 @@ fn memory(
   segment : Segment?,
   rip_relative : Bool,
 ) -> Operand {
-  Mem(Memory::{ size, base, index, scale, disp, segment, rip_relative })
+  Mem({ size, base, index, scale, disp, segment, rip_relative })
 }
 
 ///|

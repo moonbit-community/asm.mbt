@@ -170,11 +170,11 @@ fn memory_index(register : Register) -> GprBase raise ASMContextError {
 /// means disp32 or RIP-relative, so they are emitted as disp8 = 0.
 fn mod_disp_for_base(base : GprBase, disp : Int) -> ModDisp {
   if disp == 0 && !base.is_base_pointer_encoding() {
-    ModDisp::{ mod_bits: 0, disp_size: 0 }
+    { mod_bits: 0, disp_size: 0 }
   } else if fits_i8(disp) {
-    ModDisp::{ mod_bits: 1, disp_size: 1 }
+    { mod_bits: 1, disp_size: 1 }
   } else {
-    ModDisp::{ mod_bits: 2, disp_size: 4 }
+    { mod_bits: 2, disp_size: 4 }
   }
 }
 
@@ -186,7 +186,7 @@ fn encode_rm(
 ) -> EncodedRm raise ASMContextError {
   match rm {
     RmReg(register) =>
-      EncodedRm::{
+      {
         modrm: (0xC0 : Byte) | (reg_bits << 3) | register.low3(),
         sib: None,
         disp: 0,
@@ -209,7 +209,7 @@ fn encode_memory_rm(
   if memory.rip_relative {
     // In 64-bit mode, mod=00 r/m=101 is RIP-relative regardless of REX.B.
     // Keep rex_b false so this never accidentally becomes the r13 base form.
-    EncodedRm::{
+    {
       modrm: (reg_bits << 3) | 5,
       sib: None,
       disp: memory.disp,
@@ -247,7 +247,7 @@ fn encode_memory_rm(
             Some(index) => index.needs_rex_bit()
             None => false
           }
-          EncodedRm::{
+          {
             modrm: (mod_disp.mod_bits << 6) | (reg_bits << 3) | 4,
             sib: Some((scale << 6) | (index_bits << 3) | base.low3()),
             disp: memory.disp,
@@ -259,7 +259,7 @@ fn encode_memory_rm(
             segment: memory.segment,
           }
         } else {
-          EncodedRm::{
+          {
             modrm: (mod_disp.mod_bits << 6) | (reg_bits << 3) | base.low3(),
             sib: None,
             disp: memory.disp,
@@ -282,7 +282,7 @@ fn encode_memory_rm(
           Some(index) => index.needs_rex_bit()
           None => false
         }
-        EncodedRm::{
+        {
           modrm: (reg_bits << 3) | 4,
           sib: Some((scale << 6) | (index_bits << 3) | 5),
           disp: memory.disp,

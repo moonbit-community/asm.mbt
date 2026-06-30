@@ -12,7 +12,7 @@ let executable_allocations : Array[ExecutableAllocation] = []
 
 ///|
 fn remember_executable_allocation(start : UInt64, size : UInt64) -> Unit {
-  executable_allocations.push(ExecutableAllocation::{ start, size })
+  executable_allocations.push({ start, size })
 }
 
 ///|
