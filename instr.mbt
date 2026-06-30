@@ -1,5 +1,5 @@
 ///|
-/// Debug trace of the concrete x86 opcode forms emitted into an `ASMContext`.
+/// Debug trace of the concrete x86 opcode forms emitted into a `JITContext`.
 ///
 /// The encoder records these values alongside raw bytes so tests and future
 /// diagnostics can inspect the encoded instruction stream without decoding

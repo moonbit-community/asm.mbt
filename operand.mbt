@@ -48,7 +48,7 @@ pub(all) enum Operand {
 } derive(Debug, Eq)
 
 ///|
-/// A position inside an `ASMContext` code buffer.
+/// A position inside a `JITContext` code buffer.
 ///
 /// Labels store byte offsets, not absolute addresses, so they are only valid
 /// for the context that created them.
@@ -57,7 +57,7 @@ struct Label {
 } derive(Debug, Eq)
 
 ///|
-/// Destination accepted by `ASMContext::call`.
+/// Destination accepted by `JITContext::call`.
 ///
 /// `Label` is an in-buffer target. `Extern` stores an offset from the current
 /// code buffer start to an external function pointer so CALL can still emit a

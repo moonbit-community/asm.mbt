@@ -1,34 +1,32 @@
 ///|
-fn assert_emitted(ctx : @asm.ASMContext, expected : Array[Byte]) -> Unit raise {
+fn assert_emitted(ctx : @asm.JITContext, expected : Array[Byte]) -> Unit raise {
   assert_eq(ctx.bytes(), Bytes::from_array(expected))
 }
 
 ///|
-fn byte_context() -> @asm.ASMContext {
-  @asm.ASMContext::new(start=0UL)
+fn byte_context() -> @asm.JITContext raise @asm.ASMContextError {
+  @asm.JITContext::new()
 }
 
 ///|
 test "rex_extended_registers_and_imm64_execute" {
-  let start = @asm.alloc()
-  let ctx = @asm.ASMContext::new(start~)
+  let ctx = @asm.JITContext::new()
   ctx.mov(@asm.reg(@asm.r8), @asm.imm64(42L))
   ctx.mov(@asm.reg(@asm.rax), @asm.reg(@asm.r8))
   ctx.ret()
-  assert_eq(ctx.exec(), 42)
+  assert_eq(ctx.finalize_fn_i64().call(), 42)
 }
 
 ///|
 test "stack_memory_roundtrip_executes" {
-  let start = @asm.alloc()
-  let ctx = @asm.ASMContext::new(start~)
+  let ctx = @asm.JITContext::new()
   ctx.mov(@asm.reg(@asm.rax), @asm.imm32(123))
   ctx.push(@asm.reg(@asm.rax))
   ctx.mov(@asm.reg(@asm.rdx), @asm.mem64(base=@asm.rsp))
   ctx.pop(@asm.reg(@asm.rcx))
   ctx.mov(@asm.reg(@asm.rax), @asm.reg(@asm.rdx))
   ctx.ret()
-  assert_eq(ctx.exec(), 123)
+  assert_eq(ctx.finalize_fn_i64().call(), 123)
 }
 
 ///|
