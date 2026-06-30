@@ -38,15 +38,19 @@ pub(all) suberror ASMContextError {
   UnsupportedMovOperands(Operand, Operand)
   UnsupportedPushOperand(Operand)
   UnsupportedPopOperand(Operand)
+  CallRel32OutOfRange(Target, Int64)
   // Executable-memory lifecycle errors.
   ExecutableMemoryAllocationFailed(UInt64, Int)
   GeneratedCodeExceedsMemory(UInt64, UInt64)
   ExecutableMemoryProtectionFailed(UInt64, UInt64, Int)
   JITContextAlreadyFinalized
+  DynamicLibraryOpenFailed
+  ExternalSymbolResolutionFailed(String)
   // Generic validation errors shared by the encoding layer.
   UnsupportedOperandWidth(Operand)
   OperandWidthMismatch(Width, Width)
   ImmediateOutOfRange(Immediate)
+  MemoryDisplacementOutOfRange(Int64)
   InvalidMemoryScale(Int)
   InvalidMemoryBase(Register)
   InvalidMemoryIndex(Register)
@@ -82,14 +86,18 @@ pub fn JITContext::label(self : JITContext) -> Label {
 /// Resolve a symbol in the current process for use with `call`.
 ///
 /// The returned target stores an offset relative to this context's code buffer,
-/// matching x86-64 CALL rel32 encoding.
-pub fn JITContext::extern_fn(self : JITContext, name : String) -> Target {
+/// matching x86-64 CALL rel32 encoding. Raises when the current process cannot
+/// be opened as a dynamic-library handle or when the symbol is missing.
+pub fn JITContext::extern_fn(
+  self : JITContext,
+  name : String,
+) -> Target raise ASMContextError {
   let handle = dlopen()
   let fn_pointer = dlsym(handle, name)
   let rel = if fn_pointer > self.mem_ptr {
-    (fn_pointer - self.mem_ptr).to_int()
+    (fn_pointer - self.mem_ptr).reinterpret_as_int64()
   } else {
-    -(self.mem_ptr - fn_pointer).to_int()
+    -(self.mem_ptr - fn_pointer).reinterpret_as_int64()
   }
   Extern(rel)
 }
@@ -327,6 +335,7 @@ fn JITContext::emit_binary_imm(
       binary_rm_imm8_sign_ext_instr(kind, dst, immediate)
     }
     (W64, Imm32(_)) => {
+      immediate.validate_signed_imm32()
       self.emit_group_rm(W64, 0x81, extension, rm, true)
       self.emit_immediate(immediate)
       binary_rm_imm_instr(kind, dst, immediate)
@@ -628,6 +637,7 @@ fn JITContext::emit_imul_imm(
       IMulRegRmImmOp69(dst, Reg(dst), immediate)
     }
     (W64, Imm32(_)) => {
+      immediate.validate_signed_imm32()
       self.emit_reg_rm(W64, 0x69, dst, reg_as_rm(dst), true)
       self.emit_immediate(immediate)
       IMulRegRmImmOp69(dst, Reg(dst), immediate)
@@ -694,6 +704,7 @@ fn JITContext::emit_mov_reg_imm(
       MovRegImmOpB8(dst, immediate)
     }
     (W64, Imm32(_)) => {
+      immediate.validate_signed_imm32()
       self.emit_group_rm(W64, 0xC7, 0, reg_as_rm(dst), true)
       self.emit_immediate(immediate)
       MovRmImmOpC7Ext0(Reg(dst), immediate)
@@ -733,6 +744,7 @@ fn JITContext::emit_mov_mem_imm(
       MovRmImmOpC7Ext0(Mem(dst), immediate)
     }
     (W64, Imm32(_)) => {
+      immediate.validate_signed_imm32()
       self.emit_group_rm(W64, 0xC7, 0, mem_as_rm(dst), true)
       self.emit_immediate(immediate)
       MovRmImmOpC7Ext0(Mem(dst), immediate)
@@ -841,6 +853,7 @@ fn JITContext::emit_push_imm(
       PushImmOp68(immediate)
     }
     Imm32(_) => {
+      immediate.validate_signed_imm32()
       self.emit_byte(0x68)
       self.emit_immediate(immediate)
       PushImmOp68(immediate)
@@ -929,14 +942,23 @@ pub fn JITContext::pop(
 
 ///|
 /// Emit CALL rel32 to either an in-buffer label or an external symbol.
-pub fn JITContext::call(self : JITContext, target : Target) -> Unit {
+///
+/// Raises before emission if the final displacement is outside the signed
+/// 32-bit range accepted by x86-64 CALL rel32.
+pub fn JITContext::call(
+  self : JITContext,
+  target : Target,
+) -> Unit raise ASMContextError {
   let dst = match target {
-    Label(label) => label.offset
+    Label(label) => label.offset.to_int64()
     Extern(dst) => dst
   }
-  let src = self.mem_offset
+  let src = self.mem_offset.to_int64()
   // x86 CALL rel32 is relative to the first byte after the displacement.
-  let rel = dst - (src + 5)
+  let rel = dst - (src + 5L)
+  if !fits_i32(rel) {
+    raise CallRel32OutOfRange(target, rel)
+  }
   self.emit_byte(0xE8)
   self.emit_i32(rel)
   self.instrs.push(CallRel32OpE8(target, rel))

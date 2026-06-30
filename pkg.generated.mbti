@@ -56,7 +56,7 @@ pub let esp : Register
 
 pub fn imm16(Int) -> Operand
 
-pub fn imm32(Int) -> Operand
+pub fn imm32(Int64) -> Operand
 
 pub fn imm64(Int64) -> Operand
 
@@ -64,15 +64,15 @@ pub fn imm8(Int) -> Operand
 
 pub fn linux_syscall_number(String) -> Int?
 
-pub fn mem(size~ : Width, base? : Register?, index? : Register?, scale? : Int, disp? : Int, segment? : Segment?) -> Operand
+pub fn mem(size~ : Width, base? : Register?, index? : Register?, scale? : Int, disp? : Int64, segment? : Segment?) -> Operand
 
-pub fn mem16(base? : Register, index? : Register, scale? : Int, disp? : Int, segment? : Segment?) -> Operand
+pub fn mem16(base? : Register, index? : Register, scale? : Int, disp? : Int64, segment? : Segment?) -> Operand
 
-pub fn mem32(base? : Register, index? : Register, scale? : Int, disp? : Int, segment? : Segment?) -> Operand
+pub fn mem32(base? : Register, index? : Register, scale? : Int, disp? : Int64, segment? : Segment?) -> Operand
 
-pub fn mem64(base? : Register, index? : Register, scale? : Int, disp? : Int, segment? : Segment?) -> Operand
+pub fn mem64(base? : Register, index? : Register, scale? : Int, disp? : Int64, segment? : Segment?) -> Operand
 
-pub fn mem8(base? : Register, index? : Register, scale? : Int, disp? : Int, segment? : Segment?) -> Operand
+pub fn mem8(base? : Register, index? : Register, scale? : Int, disp? : Int64, segment? : Segment?) -> Operand
 
 pub let r10 : Register
 
@@ -152,13 +152,13 @@ pub let rdx : Register
 
 pub fn reg(Register) -> Operand
 
-pub fn rip16(Int, segment? : Segment?) -> Operand
+pub fn rip16(Int64, segment? : Segment?) -> Operand
 
-pub fn rip32(Int, segment? : Segment?) -> Operand
+pub fn rip32(Int64, segment? : Segment?) -> Operand
 
-pub fn rip64(Int, segment? : Segment?) -> Operand
+pub fn rip64(Int64, segment? : Segment?) -> Operand
 
-pub fn rip8(Int, segment? : Segment?) -> Operand
+pub fn rip8(Int64, segment? : Segment?) -> Operand
 
 pub let rsi : Register
 
@@ -185,13 +185,17 @@ pub(all) suberror ASMContextError {
   UnsupportedMovOperands(Operand, Operand)
   UnsupportedPushOperand(Operand)
   UnsupportedPopOperand(Operand)
+  CallRel32OutOfRange(Target, Int64)
   ExecutableMemoryAllocationFailed(UInt64, Int)
   GeneratedCodeExceedsMemory(UInt64, UInt64)
   ExecutableMemoryProtectionFailed(UInt64, UInt64, Int)
   JITContextAlreadyFinalized
+  DynamicLibraryOpenFailed
+  ExternalSymbolResolutionFailed(String)
   UnsupportedOperandWidth(Operand)
   OperandWidthMismatch(Width, Width)
   ImmediateOutOfRange(Immediate)
+  MemoryDisplacementOutOfRange(Int64)
   InvalidMemoryScale(Int)
   InvalidMemoryBase(Register)
   InvalidMemoryIndex(Register)
@@ -229,7 +233,7 @@ pub(all) enum High8Reg {
 pub(all) enum Immediate {
   Imm8(Int)
   Imm16(Int)
-  Imm32(Int)
+  Imm32(Int64)
   Imm64(Int64)
 } derive(Eq, @debug.Debug)
 
@@ -237,7 +241,7 @@ pub(all) enum Instr {
   RetNearOpC3
   NopOp90
   SyscallOp0F05
-  CallRel32OpE8(Target, Int)
+  CallRel32OpE8(Target, Int64)
   LoopRcxRel8OpE2(Label, Int)
   MovRm8Reg8Op88(Operand, Register)
   MovRmRegOp89(Operand, Register)
@@ -288,9 +292,9 @@ pub(all) enum Instr {
 type JITContext
 pub fn JITContext::add(Self, Operand, Operand) -> Unit raise ASMContextError
 pub fn JITContext::bytes(Self) -> Bytes
-pub fn JITContext::call(Self, Target) -> Unit
+pub fn JITContext::call(Self, Target) -> Unit raise ASMContextError
 pub fn JITContext::dec(Self, Operand) -> Unit raise ASMContextError
-pub fn JITContext::extern_fn(Self, String) -> Target
+pub fn JITContext::extern_fn(Self, String) -> Target raise ASMContextError
 pub fn JITContext::finalize_fn_i64(Self) -> JITFunction[() -> Int64] raise ASMContextError
 pub fn JITContext::imul(Self, Operand, Operand) -> Unit raise ASMContextError
 pub fn JITContext::inc(Self, Operand) -> Unit raise ASMContextError
@@ -320,7 +324,7 @@ pub(all) struct Memory {
   base : Register?
   index : Register?
   scale : Int
-  disp : Int
+  disp : Int64
   segment : Segment?
   rip_relative : Bool
 } derive(Eq, @debug.Debug)
@@ -339,7 +343,7 @@ pub(all) enum Register {
 
 pub(all) enum RelTarget {
   RelLabel(Label)
-  Rel32(Int)
+  Rel32(Int64)
 } derive(Eq, @debug.Debug)
 
 pub(all) enum Segment {
@@ -349,7 +353,7 @@ pub(all) enum Segment {
 
 pub(all) enum Target {
   Label(Label)
-  Extern(Int)
+  Extern(Int64)
 } derive(Eq, @debug.Debug)
 
 pub(all) enum Width {

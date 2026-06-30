@@ -47,7 +47,21 @@ fn mprotect_rx(start : UInt64, length : UInt64) -> Unit raise ASMContextError {
 
 ///|
 /// Open the current process as a dynamic-library handle.
-extern "c" fn dlopen() -> LibHandle = "asm_dot_mbt_dlopen"
+extern "c" fn __dlopen() -> LibHandle = "asm_dot_mbt_dlopen"
+
+///|
+/// Check whether a dynamic-library handle is null.
+extern "c" fn lib_handle_is_null(handle : LibHandle) -> Bool = "asm_dot_mbt_lib_handle_is_null"
+
+///|
+/// Open the current process as a dynamic-library handle, raising on failure.
+fn dlopen() -> LibHandle raise ASMContextError {
+  let handle = __dlopen()
+  if lib_handle_is_null(handle) {
+    raise DynamicLibraryOpenFailed
+  }
+  handle
+}
 
 ///|
 /// Resolve a symbol from a dynamic-library handle.
@@ -56,9 +70,16 @@ extern "c" fn __dlsym(handle : LibHandle, symbol : Bytes) -> FnPointer = "dlsym"
 
 ///|
 /// Resolve a UTF-8 symbol name to a raw function address.
-fn dlsym(handle : LibHandle, symbol : String) -> FnPointer {
-  let symbol = @utf8.encode(symbol)
-  __dlsym(handle, symbol)
+fn dlsym(
+  handle : LibHandle,
+  symbol : String,
+) -> FnPointer raise ASMContextError {
+  let symbol_bytes = @utf8.encode(symbol)
+  let pointer = __dlsym(handle, symbol_bytes)
+  if pointer == 0UL {
+    raise ExternalSymbolResolutionFailed(symbol)
+  }
+  pointer
 }
 
 ///|

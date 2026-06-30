@@ -53,7 +53,7 @@ test "loop_rel8_jumps_to_instruction_start" {
 ///|
 fn factorial(ctx : @asm.JITContext, n : Int) -> Unit raise @asm.ASMContextError {
   // Emit a loop that multiplies RAX by RCX while LOOP decrements RCX.
-  ctx.mov(@asm.reg(@asm.rcx), @asm.imm32(n))
+  ctx.mov(@asm.reg(@asm.rcx), @asm.imm32(n.to_int64()))
   ctx.mov(@asm.reg(@asm.rax), @asm.imm32(1))
   let l1 = ctx.label()
   ctx.mul(@asm.reg(@asm.rcx))

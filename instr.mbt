@@ -8,7 +8,7 @@ pub(all) enum Instr {
   RetNearOpC3
   NopOp90
   SyscallOp0F05
-  CallRel32OpE8(Target, Int)
+  CallRel32OpE8(Target, Int64)
   LoopRcxRel8OpE2(Label, Int)
   MovRm8Reg8Op88(Operand, Register)
   MovRmRegOp89(Operand, Register)

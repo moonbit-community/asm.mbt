@@ -12,3 +12,13 @@ test "extern_call_libc_abs" {
   ctx.ret()
   assert_eq(ctx.finalize_fn_i64().call(), 50)
 }
+
+///|
+test "missing_extern_symbol_raises_context_error" {
+  let ctx = @asm.JITContext::new()
+  let name = "__asm_mbt_missing_symbol_for_test__"
+  guard @test.expect_error(() => ignore(ctx.extern_fn(name)))
+    is ExternalSymbolResolutionFailed("__asm_mbt_missing_symbol_for_test__") else {
+    fail("expected ExternalSymbolResolutionFailed")
+  }
+}

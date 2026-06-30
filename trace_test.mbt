@@ -291,6 +291,116 @@ test "validation_failures_preserve_bytes_and_trace" {
 }
 
 ///|
+test "range_validation_failures_preserve_bytes_and_trace" {
+  let imm32 = trace_context()
+  imm32.nop()
+  let before_bytes = imm32.bytes()
+  let before_trace = imm32.trace()
+  let imm32_error = expect_failed_emit_preserved(
+    imm32,
+    before_bytes,
+    before_trace,
+    () => imm32.mov(@asm.reg(@asm.eax), @asm.imm32(4294967296L)),
+  )
+  guard imm32_error is ImmediateOutOfRange(Imm32(4294967296L)) else {
+    fail("expected ImmediateOutOfRange")
+  }
+
+  let sign_extended = trace_context()
+  sign_extended.nop()
+  let before_bytes = sign_extended.bytes()
+  let before_trace = sign_extended.trace()
+  let sign_extended_error = expect_failed_emit_preserved(
+    sign_extended,
+    before_bytes,
+    before_trace,
+    () => sign_extended.mov(@asm.reg(@asm.rax), @asm.imm32(2147483648L)),
+  )
+  guard sign_extended_error is ImmediateOutOfRange(Imm32(2147483648L)) else {
+    fail("expected ImmediateOutOfRange")
+  }
+
+  let memory = trace_context()
+  memory.nop()
+  let before_bytes = memory.bytes()
+  let before_trace = memory.trace()
+  let memory_error = expect_failed_emit_preserved(
+    memory,
+    before_bytes,
+    before_trace,
+    () => {
+      memory.mov(
+        @asm.reg(@asm.rax),
+        @asm.mem64(base=@asm.rax, disp=2147483648L),
+      )
+    },
+  )
+  guard memory_error is MemoryDisplacementOutOfRange(2147483648L) else {
+    fail("expected MemoryDisplacementOutOfRange")
+  }
+
+  let rip = trace_context()
+  rip.nop()
+  let before_bytes = rip.bytes()
+  let before_trace = rip.trace()
+  let rip_error = expect_failed_emit_preserved(
+    rip,
+    before_bytes,
+    before_trace,
+    () => rip.mov(@asm.reg(@asm.rax), @asm.rip64(2147483648L)),
+  )
+  guard rip_error is MemoryDisplacementOutOfRange(2147483648L) else {
+    fail("expected MemoryDisplacementOutOfRange")
+  }
+
+  let call = trace_context()
+  call.nop()
+  let before_bytes = call.bytes()
+  let before_trace = call.trace()
+  let target : @asm.Target = Extern(2147483654L)
+  let call_error = expect_failed_emit_preserved(
+    call,
+    before_bytes,
+    before_trace,
+    () => call.call(target),
+  )
+  guard call_error is CallRel32OutOfRange(Extern(2147483654L), 2147483648L) else {
+    fail("expected CallRel32OutOfRange")
+  }
+}
+
+///|
+test "high8_memory_registers_are_not_treated_as_omitted" {
+  let base = trace_context()
+  base.nop()
+  let before_bytes = base.bytes()
+  let before_trace = base.trace()
+  let base_error = expect_failed_emit_preserved(
+    base,
+    before_bytes,
+    before_trace,
+    () => base.mov(@asm.reg(@asm.rax), @asm.mem64(base=@asm.ah)),
+  )
+  guard base_error is InvalidMemoryBase(High8(AH)) else {
+    fail("expected InvalidMemoryBase")
+  }
+
+  let index = trace_context()
+  index.nop()
+  let before_bytes = index.bytes()
+  let before_trace = index.trace()
+  let index_error = expect_failed_emit_preserved(
+    index,
+    before_bytes,
+    before_trace,
+    () => index.mov(@asm.reg(@asm.rax), @asm.mem64(index=@asm.ch)),
+  )
+  guard index_error is InvalidMemoryIndex(High8(CH)) else {
+    fail("expected InvalidMemoryIndex")
+  }
+}
+
+///|
 test "failed_emits_preserve_bytes_and_trace" {
   let unsupported = trace_context()
   unsupported.nop()
