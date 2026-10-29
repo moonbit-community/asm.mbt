@@ -8,9 +8,9 @@ pub(all) enum Segment {
 ///|
 /// Immediate operand with an explicit encoded width.
 pub(all) enum Immediate {
-  Imm8(Int)
-  Imm16(Int)
-  Imm32(Int)
+  Imm8(Int32)
+  Imm16(Int32)
+  Imm32(Int32)
   Imm64(Int64)
 } derive(Debug, Eq)
 
@@ -24,8 +24,8 @@ pub(all) struct Memory {
   size : Width
   base : Register?
   index : Register?
-  scale : Int
-  disp : Int
+  scale : Int32
+  disp : Int32
   segment : Segment?
   rip_relative : Bool
 } derive(Debug, Eq)
@@ -35,7 +35,7 @@ pub(all) struct Memory {
 /// immediates.
 pub(all) enum RelTarget {
   RelLabel(Label)
-  Rel32(Int)
+  Rel32(Int32)
 } derive(Debug, Eq)
 
 ///|
@@ -53,7 +53,7 @@ pub(all) enum Operand {
 /// Labels store byte offsets, not absolute addresses, so they are only valid
 /// for the context that created them.
 struct Label {
-  offset : Int
+  offset : Int32
 } derive(Debug, Eq)
 
 ///|
@@ -64,7 +64,7 @@ struct Label {
 /// relative displacement.
 pub(all) enum Target {
   Label(Label)
-  Extern(Int)
+  Extern(Int32)
 } derive(Debug, Eq)
 
 ///|
@@ -88,7 +88,7 @@ pub fn reg(register : Register) -> Operand {
 ///
 /// The encoder accepts signed 8-bit values and byte-sized unsigned literals
 /// in the range `0..255`; out-of-range values raise `ImmediateOutOfRange`.
-pub fn imm8(value : Int) -> Operand {
+pub fn imm8(value : Int32) -> Operand {
   Imm(Imm8(value))
 }
 
@@ -97,7 +97,7 @@ pub fn imm8(value : Int) -> Operand {
 ///
 /// Values must fit in the 16-bit encoded field used by the selected
 /// instruction form.
-pub fn imm16(value : Int) -> Operand {
+pub fn imm16(value : Int32) -> Operand {
   Imm(Imm16(value))
 }
 
@@ -106,7 +106,7 @@ pub fn imm16(value : Int) -> Operand {
 ///
 /// Many 64-bit integer instructions encode `imm32` and sign-extend it to the
 /// operand width, matching the x86-64 instruction tables.
-pub fn imm32(value : Int) -> Operand {
+pub fn imm32(value : Int32) -> Operand {
   Imm(Imm32(value))
 }
 
@@ -124,12 +124,12 @@ fn memory(
   size : Width,
   base : Register?,
   index : Register?,
-  scale : Int,
-  disp : Int,
+  scale : Int32,
+  disp : Int32,
   segment : Segment?,
   rip_relative : Bool,
 ) -> Operand {
-  Mem({ size, base, index, scale, disp, segment, rip_relative })
+  Mem({ size, base, index, scale, disp, segment, rip_relative, })
 }
 
 ///|
@@ -140,11 +140,11 @@ fn memory(
 /// `mem32`, `mem64`) for the common forms.
 pub fn mem(
   size~ : Width,
-  base? : Register? = None,
-  index? : Register? = None,
-  scale? : Int = 1,
-  disp? : Int = 0,
-  segment? : Segment? = None,
+  base~ : Register? = None,
+  index~ : Register? = None,
+  scale~ : Int32 = 1,
+  disp~ : Int32 = 0,
+  segment~ : Segment? = None,
 ) -> Operand {
   memory(size, base, index, scale, disp, segment, false)
 }
@@ -171,11 +171,11 @@ fn optional_memory_register(
 ///
 /// Omitting both `base` and `index` encodes an absolute disp32 memory operand.
 pub fn mem8(
-  base? : Register = High8(AH),
-  index? : Register = High8(CH),
-  scale? : Int = 1,
-  disp? : Int = 0,
-  segment? : Segment? = None,
+  base~ : Register = High8(AH),
+  index~ : Register = High8(CH),
+  scale~ : Int32 = 1,
+  disp~ : Int32 = 0,
+  segment~ : Segment? = None,
 ) -> Operand {
   memory(
     W8,
@@ -194,11 +194,11 @@ pub fn mem8(
 /// This controls the data width, not the address width; addresses are still
 /// 64-bit mode addresses.
 pub fn mem16(
-  base? : Register = High8(AH),
-  index? : Register = High8(CH),
-  scale? : Int = 1,
-  disp? : Int = 0,
-  segment? : Segment? = None,
+  base~ : Register = High8(AH),
+  index~ : Register = High8(CH),
+  scale~ : Int32 = 1,
+  disp~ : Int32 = 0,
+  segment~ : Segment? = None,
 ) -> Operand {
   memory(
     W16,
@@ -214,11 +214,11 @@ pub fn mem16(
 ///|
 /// Build a 32-bit memory operand.
 pub fn mem32(
-  base? : Register = High8(AH),
-  index? : Register = High8(CH),
-  scale? : Int = 1,
-  disp? : Int = 0,
-  segment? : Segment? = None,
+  base~ : Register = High8(AH),
+  index~ : Register = High8(CH),
+  scale~ : Int32 = 1,
+  disp~ : Int32 = 0,
+  segment~ : Segment? = None,
 ) -> Operand {
   memory(
     W32,
@@ -237,11 +237,11 @@ pub fn mem32(
 /// Examples include `mem64(base=rax)`, `mem64(base=rbp, disp=-8)`, and
 /// `mem64(base=rax, index=r12, scale=4, disp=8)`.
 pub fn mem64(
-  base? : Register = High8(AH),
-  index? : Register = High8(CH),
-  scale? : Int = 1,
-  disp? : Int = 0,
-  segment? : Segment? = None,
+  base~ : Register = High8(AH),
+  index~ : Register = High8(CH),
+  scale~ : Int32 = 1,
+  disp~ : Int32 = 0,
+  segment~ : Segment? = None,
 ) -> Operand {
   memory(
     W64,
@@ -256,19 +256,19 @@ pub fn mem64(
 
 ///|
 /// Build an 8-bit RIP-relative memory operand.
-pub fn rip8(disp : Int, segment? : Segment? = None) -> Operand {
+pub fn rip8(disp : Int32, segment~ : Segment? = None) -> Operand {
   memory(W8, None, None, 1, disp, segment, true)
 }
 
 ///|
 /// Build a 16-bit RIP-relative memory operand.
-pub fn rip16(disp : Int, segment? : Segment? = None) -> Operand {
+pub fn rip16(disp : Int32, segment~ : Segment? = None) -> Operand {
   memory(W16, None, None, 1, disp, segment, true)
 }
 
 ///|
 /// Build a 32-bit RIP-relative memory operand.
-pub fn rip32(disp : Int, segment? : Segment? = None) -> Operand {
+pub fn rip32(disp : Int32, segment~ : Segment? = None) -> Operand {
   memory(W32, None, None, 1, disp, segment, true)
 }
 
@@ -277,6 +277,6 @@ pub fn rip32(disp : Int, segment? : Segment? = None) -> Operand {
 ///
 /// RIP-relative memory always uses the ModR/M `mod=00 r/m=101` form with a
 /// disp32 field in 64-bit mode.
-pub fn rip64(disp : Int, segment? : Segment? = None) -> Operand {
+pub fn rip64(disp : Int32, segment~ : Segment? = None) -> Operand {
   memory(W64, None, None, 1, disp, segment, true)
 }

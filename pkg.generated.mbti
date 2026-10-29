@@ -54,25 +54,25 @@ pub let esi : Register
 
 pub let esp : Register
 
-pub fn imm16(Int) -> Operand
+pub fn imm16(Int32) -> Operand
 
-pub fn imm32(Int) -> Operand
+pub fn imm32(Int32) -> Operand
 
 pub fn imm64(Int64) -> Operand
 
-pub fn imm8(Int) -> Operand
+pub fn imm8(Int32) -> Operand
 
-pub fn linux_syscall_number(String) -> Int?
+pub fn linux_syscall_number(String) -> Int32?
 
-pub fn mem(size~ : Width, base? : Register?, index? : Register?, scale? : Int, disp? : Int, segment? : Segment?) -> Operand
+pub fn mem(size~ : Width, base? : Register?, index? : Register?, scale? : Int32, disp? : Int32, segment? : Segment?) -> Operand
 
-pub fn mem16(base? : Register, index? : Register, scale? : Int, disp? : Int, segment? : Segment?) -> Operand
+pub fn mem16(base? : Register, index? : Register, scale? : Int32, disp? : Int32, segment? : Segment?) -> Operand
 
-pub fn mem32(base? : Register, index? : Register, scale? : Int, disp? : Int, segment? : Segment?) -> Operand
+pub fn mem32(base? : Register, index? : Register, scale? : Int32, disp? : Int32, segment? : Segment?) -> Operand
 
-pub fn mem64(base? : Register, index? : Register, scale? : Int, disp? : Int, segment? : Segment?) -> Operand
+pub fn mem64(base? : Register, index? : Register, scale? : Int32, disp? : Int32, segment? : Segment?) -> Operand
 
-pub fn mem8(base? : Register, index? : Register, scale? : Int, disp? : Int, segment? : Segment?) -> Operand
+pub fn mem8(base? : Register, index? : Register, scale? : Int32, disp? : Int32, segment? : Segment?) -> Operand
 
 pub let r10 : Register
 
@@ -152,13 +152,13 @@ pub let rdx : Register
 
 pub fn reg(Register) -> Operand
 
-pub fn rip16(Int, segment? : Segment?) -> Operand
+pub fn rip16(Int32, segment? : Segment?) -> Operand
 
-pub fn rip32(Int, segment? : Segment?) -> Operand
+pub fn rip32(Int32, segment? : Segment?) -> Operand
 
-pub fn rip64(Int, segment? : Segment?) -> Operand
+pub fn rip64(Int32, segment? : Segment?) -> Operand
 
-pub fn rip8(Int, segment? : Segment?) -> Operand
+pub fn rip8(Int32, segment? : Segment?) -> Operand
 
 pub let rsi : Register
 
@@ -180,24 +180,25 @@ pub(all) suberror ASMContextError {
   UnsupportedMulOperand(Operand)
   UnsupportedIncOperand(Operand)
   UnsupportedDecOperand(Operand)
-  LoopRel8OutOfRange(Int)
+  LoopRel8OutOfRange(Int32)
   UnsupportedIMulOperands(Operand, Operand)
   UnsupportedMovOperands(Operand, Operand)
   UnsupportedPushOperand(Operand)
   UnsupportedPopOperand(Operand)
-  ExecutableMemoryAllocationFailed(UInt64, Int)
+  ExecutableMemoryAllocationFailed(UInt64, Int32)
   GeneratedCodeExceedsMemory(UInt64, UInt64)
-  ExecutableMemoryProtectionFailed(UInt64, UInt64, Int)
+  ExecutableMemoryProtectionFailed(UInt64, UInt64, Int32)
   JITContextAlreadyFinalized
   UnsupportedOperandWidth(Operand)
   OperandWidthMismatch(Width, Width)
   ImmediateOutOfRange(Immediate)
-  InvalidMemoryScale(Int)
+  InvalidMemoryScale(Int32)
   InvalidMemoryBase(Register)
   InvalidMemoryIndex(Register)
   MemoryIndexCannotBeStackPointer(Register)
   High8RexConflict
 } derive(@debug.Debug)
+pub fn ASMContextError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) enum GprBase {
@@ -218,6 +219,9 @@ pub(all) enum GprBase {
   R14
   R15
 } derive(Eq, @debug.Debug)
+pub fn GprBase::equal(Self, Self) -> Bool
+pub fn GprBase::not_equal(Self, Self) -> Bool
+pub fn GprBase::to_repr(Self) -> @debug.Repr
 
 pub(all) enum High8Reg {
   AH
@@ -225,20 +229,26 @@ pub(all) enum High8Reg {
   DH
   BH
 } derive(Eq, @debug.Debug)
+pub fn High8Reg::equal(Self, Self) -> Bool
+pub fn High8Reg::not_equal(Self, Self) -> Bool
+pub fn High8Reg::to_repr(Self) -> @debug.Repr
 
 pub(all) enum Immediate {
-  Imm8(Int)
-  Imm16(Int)
-  Imm32(Int)
+  Imm8(Int32)
+  Imm16(Int32)
+  Imm32(Int32)
   Imm64(Int64)
 } derive(Eq, @debug.Debug)
+pub fn Immediate::equal(Self, Self) -> Bool
+pub fn Immediate::not_equal(Self, Self) -> Bool
+pub fn Immediate::to_repr(Self) -> @debug.Repr
 
 pub(all) enum Instr {
   RetNearOpC3
   NopOp90
   SyscallOp0F05
-  CallRel32OpE8(Target, Int)
-  LoopRcxRel8OpE2(Label, Int)
+  CallRel32OpE8(Target, Int32)
+  LoopRcxRel8OpE2(Label, Int32)
   MovRm8Reg8Op88(Operand, Register)
   MovRmRegOp89(Operand, Register)
   MovReg8Rm8Op8A(Register, Operand)
@@ -284,6 +294,9 @@ pub(all) enum Instr {
   PopRegOp58(Register)
   PopRmOp8FExt0(Operand)
 } derive(Eq, @debug.Debug)
+pub fn Instr::equal(Self, Self) -> Bool
+pub fn Instr::not_equal(Self, Self) -> Bool
+pub fn Instr::to_repr(Self) -> @debug.Repr
 
 type JITContext
 pub fn JITContext::add(Self, Operand, Operand) -> Unit raise ASMContextError
@@ -313,17 +326,23 @@ pub fn JITFunction::call(Self[() -> Int64]) -> Int64
 pub fn[T] JITFunction::get_fn(Self[T]) -> FuncRef[T]
 
 type Label derive(Eq, @debug.Debug)
+pub fn Label::equal(Self, Self) -> Bool
+pub fn Label::not_equal(Self, Self) -> Bool
 pub fn Label::target(Self) -> Target
+pub fn Label::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Memory {
   size : Width
   base : Register?
   index : Register?
-  scale : Int
-  disp : Int
+  scale : Int32
+  disp : Int32
   segment : Segment?
   rip_relative : Bool
 } derive(Eq, @debug.Debug)
+pub fn Memory::equal(Self, Self) -> Bool
+pub fn Memory::not_equal(Self, Self) -> Bool
+pub fn Memory::to_repr(Self) -> @debug.Repr
 
 pub(all) enum Operand {
   Reg(Register)
@@ -331,26 +350,41 @@ pub(all) enum Operand {
   Mem(Memory)
   Rel(RelTarget)
 } derive(Eq, @debug.Debug)
+pub fn Operand::equal(Self, Self) -> Bool
+pub fn Operand::not_equal(Self, Self) -> Bool
+pub fn Operand::to_repr(Self) -> @debug.Repr
 
 pub(all) enum Register {
   Gpr(GprBase, Width)
   High8(High8Reg)
 } derive(Eq, @debug.Debug)
+pub fn Register::equal(Self, Self) -> Bool
+pub fn Register::not_equal(Self, Self) -> Bool
+pub fn Register::to_repr(Self) -> @debug.Repr
 
 pub(all) enum RelTarget {
   RelLabel(Label)
-  Rel32(Int)
+  Rel32(Int32)
 } derive(Eq, @debug.Debug)
+pub fn RelTarget::equal(Self, Self) -> Bool
+pub fn RelTarget::not_equal(Self, Self) -> Bool
+pub fn RelTarget::to_repr(Self) -> @debug.Repr
 
 pub(all) enum Segment {
   FS
   GS
 } derive(Eq, @debug.Debug)
+pub fn Segment::equal(Self, Self) -> Bool
+pub fn Segment::not_equal(Self, Self) -> Bool
+pub fn Segment::to_repr(Self) -> @debug.Repr
 
 pub(all) enum Target {
   Label(Label)
-  Extern(Int)
+  Extern(Int32)
 } derive(Eq, @debug.Debug)
+pub fn Target::equal(Self, Self) -> Bool
+pub fn Target::not_equal(Self, Self) -> Bool
+pub fn Target::to_repr(Self) -> @debug.Repr
 
 pub(all) enum Width {
   W8
@@ -358,8 +392,10 @@ pub(all) enum Width {
   W32
   W64
 } derive(Eq, @debug.Debug)
+pub fn Width::equal(Self, Self) -> Bool
+pub fn Width::not_equal(Self, Self) -> Bool
+pub fn Width::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

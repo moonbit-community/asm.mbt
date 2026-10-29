@@ -16,8 +16,8 @@ priv struct EncodedRm {
   // Optional SIB byte required by rsp/r12 bases or scaled index addressing.
   sib : Byte?
   // Signed displacement value, encoded using `disp_size` bytes.
-  disp : Int
-  disp_size : Int
+  disp : Int32
+  disp_size : Int32
   // REX bits contributed by the r/m base and SIB index fields.
   rex_b : Bool
   rex_x : Bool
@@ -32,7 +32,7 @@ priv struct EncodedRm {
 /// Memory addressing mode and displacement width chosen from base + disp.
 priv struct ModDisp {
   mod_bits : Byte
-  disp_size : Int
+  disp_size : Int32
 }
 
 ///|
@@ -45,23 +45,23 @@ fn bool_byte(value : Bool, bit : Byte) -> Byte {
 }
 
 ///|
-fn fits_i8(value : Int) -> Bool {
+fn fits_i8(value : Int32) -> Bool {
   value >= -128 && value <= 127
 }
 
 ///|
-fn fits_imm8(value : Int) -> Bool {
+fn fits_imm8(value : Int32) -> Bool {
   value >= -128 && value <= 255
 }
 
 ///|
-fn fits_imm16(value : Int) -> Bool {
+fn fits_imm16(value : Int32) -> Bool {
   value >= -32768 && value <= 65535
 }
 
 ///|
 /// Return the two SIB scale bits for the public scale value.
-fn scale_bits(scale : Int) -> Byte raise ASMContextError {
+fn scale_bits(scale : Int32) -> Byte raise ASMContextError {
   match scale {
     1 => 0
     2 => 1
@@ -168,13 +168,13 @@ fn memory_index(register : Register) -> GprBase raise ASMContextError {
 ///
 /// rbp/r13 with no displacement cannot use `mod=00` because that encoding
 /// means disp32 or RIP-relative, so they are emitted as disp8 = 0.
-fn mod_disp_for_base(base : GprBase, disp : Int) -> ModDisp {
+fn mod_disp_for_base(base : GprBase, disp : Int32) -> ModDisp {
   if disp == 0 && !base.is_base_pointer_encoding() {
-    { mod_bits: 0, disp_size: 0 }
+    { mod_bits: 0, disp_size: 0, }
   } else if fits_i8(disp) {
-    { mod_bits: 1, disp_size: 1 }
+    { mod_bits: 1, disp_size: 1, }
   } else {
-    { mod_bits: 2, disp_size: 4 }
+    { mod_bits: 2, disp_size: 4, }
   }
 }
 
@@ -299,19 +299,19 @@ fn encode_memory_rm(
 }
 
 ///|
-fn JITContext::emit_i8(self : JITContext, value : Int) -> Unit {
+fn JITContext::emit_i8(self : JITContext, value : Int32) -> Unit {
   self.emit_byte(value.to_byte())
 }
 
 ///|
-fn JITContext::emit_i16(self : JITContext, value : Int) -> Unit {
+fn JITContext::emit_i16(self : JITContext, value : Int32) -> Unit {
   for shift in [0, 8] {
     self.emit_byte(((value >> shift) & 0xFF).to_byte())
   }
 }
 
 ///|
-fn JITContext::emit_i32(self : JITContext, value : Int) -> Unit {
+fn JITContext::emit_i32(self : JITContext, value : Int32) -> Unit {
   self.code.write_int_le(value)
   self.mem_offset += 4
 }
