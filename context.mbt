@@ -14,7 +14,7 @@ struct JITContext {
   // Size of the executable memory region.
   mem_size : UInt64
   // Current byte offset from `mem_ptr`.
-  mut mem_offset : Int
+  mut mem_offset : Int32
   // Whether this context has already produced a `JITFunction`.
   mut finalized : Bool
 }
@@ -33,21 +33,21 @@ pub(all) suberror ASMContextError {
   UnsupportedMulOperand(Operand)
   UnsupportedIncOperand(Operand)
   UnsupportedDecOperand(Operand)
-  LoopRel8OutOfRange(Int)
+  LoopRel8OutOfRange(Int32)
   UnsupportedIMulOperands(Operand, Operand)
   UnsupportedMovOperands(Operand, Operand)
   UnsupportedPushOperand(Operand)
   UnsupportedPopOperand(Operand)
   // Executable-memory lifecycle errors.
-  ExecutableMemoryAllocationFailed(UInt64, Int)
+  ExecutableMemoryAllocationFailed(UInt64, Int32)
   GeneratedCodeExceedsMemory(UInt64, UInt64)
-  ExecutableMemoryProtectionFailed(UInt64, UInt64, Int)
+  ExecutableMemoryProtectionFailed(UInt64, UInt64, Int32)
   JITContextAlreadyFinalized
   // Generic validation errors shared by the encoding layer.
   UnsupportedOperandWidth(Operand)
   OperandWidthMismatch(Width, Width)
   ImmediateOutOfRange(Immediate)
-  InvalidMemoryScale(Int)
+  InvalidMemoryScale(Int32)
   InvalidMemoryBase(Register)
   InvalidMemoryIndex(Register)
   MemoryIndexCannotBeStackPointer(Register)
@@ -57,7 +57,7 @@ pub(all) suberror ASMContextError {
 ///|
 /// Create a new code-generation context backed by one writable memory mapping.
 pub fn JITContext::new(
-  mem_size? : UInt64 = default_exec_memory_size,
+  mem_size~ : UInt64 = default_exec_memory_size,
 ) -> JITContext raise ASMContextError {
   let start = allocate_jit_memory(mem_size)
   {
@@ -75,7 +75,7 @@ pub fn JITContext::new(
 ///
 /// Use this before emitting a backward branch or as a local call target.
 pub fn JITContext::label(self : JITContext) -> Label {
-  { offset: self.mem_offset }
+  { offset: self.mem_offset, }
 }
 
 ///|

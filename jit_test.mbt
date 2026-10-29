@@ -1,6 +1,6 @@
 ///|
 fn const_i64(
-  value : Int,
+  value : Int32,
 ) -> @asm.JITFunction[() -> Int64] raise @asm.ASMContextError {
   let ctx = @asm.JITContext::new()
   ctx.mov(@asm.reg(@asm.rax), @asm.imm32(value))
